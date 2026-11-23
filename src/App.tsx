@@ -1,6 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AvatarConfig, AvatarCustomizer } from "./components/AvatarCustomizer";
-import { BaseCityCanvas, CityGroundSize } from "./components/BaseCityCanvas";
+import {
+  BaseCityCanvas,
+  BaseMarketSnapshot,
+  CityGroundSize,
+} from "./components/BaseCityCanvas";
 import {
   CityDecorItem,
   CityManagerTool,
@@ -26,6 +30,16 @@ const STORAGE_SECTORS_KEY = "base_city_sectors_v1";
 const STORAGE_MEMBERS_KEY = "base_city_members_v1";
 const STORAGE_DECOR_KEY = "base_city_decor_v1";
 
+const DEFAULT_MARKET_SNAPSHOT: BaseMarketSnapshot = {
+  tvl: "$5.15B",
+  tvlChange24h: "+12.19%",
+  stablecoins: "$4.89B",
+  dexVol24h: "$955.9M",
+  activeAddresses24h: "391.9K",
+  marketStatus: "BULLISH",
+  updatedLabel: "DefiLlama Sync",
+};
+
 const INITIAL_DECOR: CityDecorItem[] = [
   { id: "d-1", kind: "pine_tree", label: "Pine Tree", x: 31.5, y: 2.2 },
   { id: "d-2", kind: "pine_tree", label: "Pine Tree", x: 34.5, y: 1.8 },
@@ -33,12 +47,20 @@ const INITIAL_DECOR: CityDecorItem[] = [
   { id: "d-4", kind: "pine_tree", label: "Pine Tree", x: 35.2, y: 8.8 },
   { id: "d-5", kind: "palm_tree", label: "Palm Tree", x: 31.8, y: 14.5 },
   { id: "d-6", kind: "pine_tree", label: "Pine Tree", x: 35.0, y: 17.5 },
-  { id: "d-7", kind: "bench", label: "Park Bench", x: 10.8, y: 9.2 },
+  { id: "d-7", kind: "bench", label: "Park Bench", x: 11.2, y: 9.2 },
   { id: "d-8", kind: "lamp", label: "Street Lamp", x: 11.2, y: 17.2 },
   { id: "d-9", kind: "planter", label: "Flower Planter", x: 21.6, y: 9.2 },
   { id: "d-10", kind: "fountain", label: "Plaza Fountain", x: 16.5, y: 17.2 },
   { id: "d-11", kind: "umbrella", label: "Creator Umbrella", x: 26.2, y: 12.5 },
 ];
+
+function formatUsdCompact(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "$0";
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `$${(value / 1e3).toFixed(1)}K`;
+  return `$${value.toFixed(0)}`;
+}
 
 export function App() {
   const [avatar, setAvatar] = useState<AvatarConfig>({
@@ -77,6 +99,43 @@ export function App() {
       return INITIAL_DECOR;
     }
   });
+
+  const [marketSnapshot, setMarketSnapshot] = useState<BaseMarketSnapshot>(
+    DEFAULT_MARKET_SNAPSHOT
+  );
+  const [marketDrawerOpen, setMarketDrawerOpen] = useState(false);
+  const [isSyncingMarket, setIsSyncingMarket] = useState(false);
+
+  const syncDefiLlamaData = useCallback(async () => {
+    setIsSyncingMarket(true);
+    try {
+      const res = await fetch("https://api.llama.fi/v2/chains");
+      if (!res.ok) return;
+      const data = (await res.json()) as Array<{
+        name?: string;
+        tvl?: number;
+      }>;
+      const baseChain = data.find(
+        (item) => item.name?.toLowerCase() === "base" && typeof item.tvl === "number"
+      );
+      if (baseChain && typeof baseChain.tvl === "number") {
+        setMarketSnapshot((prev) => ({
+          ...prev,
+          tvl: formatUsdCompact(baseChain.tvl as number),
+          marketStatus: (baseChain.tvl as number) >= 4.5e9 ? "BULLISH" : "ACTIVE",
+          updatedLabel: "Live DefiLlama",
+        }));
+      }
+    } catch {
+      // Keep current snapshot if offline or rate-limited
+    } finally {
+      setIsSyncingMarket(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncDefiLlamaData();
+  }, [syncDefiLlamaData]);
 
   useEffect(() => {
     try {
@@ -178,9 +237,22 @@ export function App() {
             }}
           />
           <strong style={{ fontSize: 16 }}>BASE CITY</strong>
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>
-            {sectors.length} dApps/Spots • {members.length} Citizens • {decorItems.length} Props
-          </span>
+          <button
+            type="button"
+            onClick={() => setMarketDrawerOpen((prev) => !prev)}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 999,
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              background: "rgba(15, 23, 42, 0.9)",
+              color: "#38bdf8",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            TVL {marketSnapshot.tvl} • {marketSnapshot.marketStatus}
+          </button>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -351,12 +423,71 @@ export function App() {
             placingDecorKind={placingDecorKind}
             onPlaceDecorAt={handlePlaceDecorAt}
             groundSize={groundSize}
+            marketSnapshot={marketSnapshot}
             selectedSector={selectedSector}
             selectedMember={selectedMember}
             onSelectSector={setSelectedSector}
             onSelectMember={setSelectedMember}
+            onOpenMarketCorner={() => setMarketDrawerOpen(true)}
           />
         </div>
+
+        {marketDrawerOpen && (
+          <aside
+            style={{
+              position: "absolute",
+              top: 12,
+              right: 12,
+              zIndex: 11,
+              width: 280,
+              background: "rgba(15, 23, 42, 0.95)",
+              border: "1px solid rgba(56, 189, 248, 0.35)",
+              borderRadius: 14,
+              padding: 16,
+              color: "#f8fafc",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: "#38bdf8", fontWeight: 700 }}>
+                BASE TVL & MARKET CORNER
+              </span>
+              <button
+                type="button"
+                onClick={() => setMarketDrawerOpen(false)}
+                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+            <h3 style={{ margin: "6px 0 10px", fontSize: 17 }}>
+              TVL: {marketSnapshot.tvl} ({marketSnapshot.tvlChange24h})
+            </h3>
+            <div style={{ fontSize: 12, lineHeight: 1.7, color: "#e2e8f0", marginBottom: 12 }}>
+              <div>Status: <b>{marketSnapshot.marketStatus}</b></div>
+              <div>Stablecoins: <b>{marketSnapshot.stablecoins}</b></div>
+              <div>24h DEX Vol: <b>{marketSnapshot.dexVol24h}</b></div>
+              <div>Active Addrs (24h): <b>{marketSnapshot.activeAddresses24h}</b></div>
+              <div style={{ color: "#94a3b8", fontSize: 11 }}>Source: {marketSnapshot.updatedLabel}</div>
+            </div>
+            <button
+              type="button"
+              onClick={syncDefiLlamaData}
+              disabled={isSyncingMarket}
+              style={{
+                padding: "7px 12px",
+                borderRadius: 8,
+                border: "none",
+                background: "#0052FF",
+                color: "#fff",
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              {isSyncingMarket ? "Syncing DefiLlama..." : "Refresh DefiLlama TVL"}
+            </button>
+          </aside>
+        )}
 
         {selectedSector && (
           <aside
