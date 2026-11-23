@@ -32,6 +32,17 @@ function isoToGrid(sx: number, sy: number, originX: number, originY: number) {
   return { gx, gy };
 }
 
+function shadeHex(hex: string, percent: number): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return hex;
+  const num = parseInt(clean, 16);
+  const amt = Math.round(2.55 * percent);
+  const r = Math.min(255, Math.max(0, (num >> 16) + amt));
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00ff) + amt));
+  const b = Math.min(255, Math.max(0, (num & 0x0000ff) + amt));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
 export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   avatar,
   sectors,
@@ -42,7 +53,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   onSelectMember,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const playerPos = useRef({ gx: 8.5, gy: 7.5 });
+  const playerPos = useRef({ gx: 10.5, gy: 6.8 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const keysPressed = useRef<Record<string, boolean>>({});
   const walkPhase = useRef(0);
@@ -82,12 +93,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const originX = canvas.width / 2;
-    const originY = 90;
+    const originX = rect.width / 2;
+    const originY = 82;
 
     const { gx, gy } = isoToGrid(sx, sy, originX, originY);
-    const clampedX = Math.max(1, Math.min(GRID_COLS - 1.5, gx));
-    const clampedY = Math.max(1, Math.min(GRID_ROWS - 1.5, gy));
+    const clampedX = Math.max(0.5, Math.min(GRID_COLS - 1, gx));
+    const clampedY = Math.max(0.5, Math.min(GRID_ROWS - 1, gy));
     targetPos.current = { gx: clampedX, gy: clampedY };
 
     const clickedMember = members.find(
@@ -101,10 +112,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
     const clickedSector = sectors.find(
       (s) =>
-        clampedX >= s.x - 0.7 &&
-        clampedX <= s.x + s.width + 0.7 &&
-        clampedY >= s.y - 0.7 &&
-        clampedY <= s.y + s.height + 0.7
+        clampedX >= s.x - 0.6 &&
+        clampedX <= s.x + s.width + 0.6 &&
+        clampedY >= s.y - 0.6 &&
+        clampedY <= s.y + s.height + 0.6
     );
     if (clickedSector) {
       onSelectSector(clickedSector);
@@ -121,8 +132,17 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      canvas.width = canvas.clientWidth || 900;
-      canvas.height = canvas.clientHeight || 560;
+      const cssW = canvas.clientWidth || 900;
+      const cssH = canvas.clientHeight || 560;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+        canvas.width = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
 
       const speed = 0.08;
       let dx = 0;
@@ -135,8 +155,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       if (keysPressed.current["d"] || keysPressed.current["arrowright"]) dx += speed;
 
       if (dx !== 0 || dy !== 0) {
-        playerPos.current.gx = Math.max(1, Math.min(GRID_COLS - 1.5, playerPos.current.gx + dx));
-        playerPos.current.gy = Math.max(1, Math.min(GRID_ROWS - 1.5, playerPos.current.gy + dy));
+        playerPos.current.gx = Math.max(0.5, Math.min(GRID_COLS - 1, playerPos.current.gx + dx));
+        playerPos.current.gy = Math.max(0.5, Math.min(GRID_ROWS - 1, playerPos.current.gy + dy));
         isMoving = true;
       } else if (targetPos.current) {
         const diffX = targetPos.current.gx - playerPos.current.gx;
@@ -161,23 +181,24 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         sectors.find((s) => {
           const cx = s.x + s.width / 2;
           const cy = s.y + s.height / 2;
-          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 2.8;
+          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 2.7;
         }) || null;
 
       setNearbySector((prev) => (prev?.id === foundNear?.id ? prev : foundNear));
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, cssW, cssH);
 
-      const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      bgGrad.addColorStop(0, "#1e1b4b");
-      bgGrad.addColorStop(0.55, "#0f172a");
-      bgGrad.addColorStop(1, "#0284c7");
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, cssH);
+      bgGrad.addColorStop(0, "#17153b");
+      bgGrad.addColorStop(0.55, "#0b132b");
+      bgGrad.addColorStop(1, "#0369a1");
       ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, cssW, cssH);
 
-      const originX = canvas.width / 2;
-      const originY = 90;
+      const originX = cssW / 2;
+      const originY = 82;
 
+      // Ground tiles with subtle cobblestone & shore texture
       for (let r = 0; r < GRID_ROWS; r++) {
         for (let c = 0; c < GRID_COLS; c++) {
           const p0 = gridToIso(c, r, originX, originY);
@@ -185,10 +206,14 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           const p2 = gridToIso(c + 1, r + 1, originX, originY);
           const p3 = gridToIso(c, r + 1, originX, originY);
 
-          let tileFill = "#334155";
-          if (r >= 9 && r <= 11) tileFill = "#f3d58d";
-          if (r >= 12) tileFill = "#0ea5e9";
-          if (r === 5 || r === 8 || c === 6 || c === 12) tileFill = "#1e293b";
+          let tileFill = (r + c) % 2 === 0 ? "#2c3a4f" : "#263244";
+          if (r >= 10 && r <= 12) {
+            tileFill = (r + c) % 2 === 0 ? "#f4d58d" : "#ecc872";
+          } else if (r >= 13) {
+            tileFill = (r + c) % 2 === 0 ? "#0ea5e9" : "#0284c7";
+          } else if (r === 4 || r === 9 || c === 5 || c === 16) {
+            tileFill = "#1a2234";
+          }
 
           ctx.beginPath();
           ctx.moveTo(p0.x, p0.y);
@@ -198,83 +223,140 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           ctx.closePath();
           ctx.fillStyle = tileFill;
           ctx.fill();
-          ctx.strokeStyle = "rgba(255,255,255,0.06)";
+          ctx.strokeStyle = "rgba(255,255,255,0.05)";
           ctx.stroke();
         }
       }
 
-      // Draw each dApp as a Market/Expo Stall Booth
+      // HD Textured Corner Stores / Booths
       sectors.forEach((sec) => {
         const topLeft = gridToIso(sec.x, sec.y, originX, originY);
         const topRight = gridToIso(sec.x + sec.width, sec.y, originX, originY);
         const bottomRight = gridToIso(sec.x + sec.width, sec.y + sec.height, originX, originY);
         const bottomLeft = gridToIso(sec.x, sec.y + sec.height, originX, originY);
-        const counterH = 14;
-        const roofH = 38;
+
+        const counterH = 16;
+        const roofH = 42;
         const isSelected = selectedSector?.id === sec.id;
         const isNear = foundNear?.id === sec.id;
 
-        // 1. Stall Front Counter Base
+        const baseColor = sec.color;
+        const darkWall = shadeHex(baseColor, -30);
+        const lightTrim = shadeHex(baseColor, 35);
+
+        // Ground drop shadow
+        ctx.beginPath();
+        ctx.moveTo(topLeft.x + 5, topLeft.y + 5);
+        ctx.lineTo(topRight.x + 5, topRight.y + 5);
+        ctx.lineTo(bottomRight.x + 5, bottomRight.y + 5);
+        ctx.lineTo(bottomLeft.x + 5, bottomLeft.y + 5);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+        ctx.fill();
+
+        // Front Counter Body with panel detail
+        const frontGrad = ctx.createLinearGradient(0, bottomLeft.y - counterH, 0, bottomLeft.y);
+        frontGrad.addColorStop(0, lightTrim);
+        frontGrad.addColorStop(1, darkWall);
         ctx.beginPath();
         ctx.moveTo(bottomLeft.x, bottomLeft.y);
         ctx.lineTo(bottomRight.x, bottomRight.y);
         ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
         ctx.lineTo(bottomLeft.x, bottomLeft.y - counterH);
         ctx.closePath();
-        ctx.fillStyle = sec.color;
+        ctx.fillStyle = frontGrad;
         ctx.fill();
+        ctx.strokeStyle = "rgba(15, 23, 42, 0.5)";
+        ctx.stroke();
 
-        // Right counter wall
+        // Right Counter Wall
         ctx.beginPath();
         ctx.moveTo(bottomRight.x, bottomRight.y);
         ctx.lineTo(topRight.x, topRight.y);
         ctx.lineTo(topRight.x, topRight.y - counterH);
         ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
         ctx.closePath();
-        ctx.fillStyle = "#1e293b";
+        ctx.fillStyle = darkWall;
         ctx.fill();
 
-        // Counter top table
+        // Polished Counter Top + Glowing Showcase Strip
         ctx.beginPath();
         ctx.moveTo(topLeft.x, topLeft.y - counterH);
         ctx.lineTo(topRight.x, topRight.y - counterH);
         ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
         ctx.lineTo(bottomLeft.x, bottomLeft.y - counterH);
         ctx.closePath();
-        ctx.fillStyle = "#f8fafc";
+        ctx.fillStyle = "#e2e8f0";
         ctx.fill();
+        ctx.strokeStyle = "#94a3b8";
+        ctx.stroke();
 
-        // 2. Four Stall Poles supporting the Canopy
+        // Glowing display bar along front counter edge
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bottomLeft.x + 4, bottomLeft.y - counterH + 5);
+        ctx.lineTo(bottomRight.x - 4, bottomRight.y - counterH + 5);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+
+        // Four Corner Pillars with Metallic Caps
         ctx.strokeStyle = "#cbd5e1";
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2.6;
         [topLeft, topRight, bottomRight, bottomLeft].forEach((corner) => {
           ctx.beginPath();
           ctx.moveTo(corner.x, corner.y - counterH);
           ctx.lineTo(corner.x, corner.y - roofH);
           ctx.stroke();
+
+          ctx.fillStyle = "#f8fafc";
+          ctx.beginPath();
+          ctx.arc(corner.x, corner.y - roofH, 2.5, 0, Math.PI * 2);
+          ctx.fill();
         });
         ctx.lineWidth = 1;
 
-        // 3. Stall Canopy / Awning Roof
+        // Striped Canopy Roof
+        ctx.save();
         ctx.beginPath();
         ctx.moveTo(topLeft.x, topLeft.y - roofH);
         ctx.lineTo(topRight.x, topRight.y - roofH);
         ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
         ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH);
         ctx.closePath();
-        ctx.fillStyle = sec.color;
+        ctx.fillStyle = baseColor;
         ctx.fill();
+        ctx.clip();
+
+        // Diagonal stripe texture across canopy
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.24)";
+        ctx.lineWidth = 6;
+        for (let sx = topLeft.x - 140; sx < topRight.x + 140; sx += 14) {
+          ctx.beginPath();
+          ctx.moveTo(sx, topLeft.y - roofH - 60);
+          ctx.lineTo(sx + 70, bottomRight.y - roofH + 60);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Canopy border highlight
+        ctx.beginPath();
+        ctx.moveTo(topLeft.x, topLeft.y - roofH);
+        ctx.lineTo(topRight.x, topRight.y - roofH);
+        ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
+        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH);
+        ctx.closePath();
         ctx.lineWidth = isSelected || isNear ? 3 : 1.5;
         ctx.strokeStyle = isSelected || isNear ? "#facc15" : "#ffffff";
         ctx.stroke();
         ctx.lineWidth = 1;
 
-        // Front Awning Flap
+        // Scalloped Front Awning Valance
         ctx.beginPath();
         ctx.moveTo(bottomLeft.x, bottomLeft.y - roofH);
         ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
-        ctx.lineTo(bottomRight.x, bottomRight.y - roofH + 7);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH + 7);
+        ctx.lineTo(bottomRight.x, bottomRight.y - roofH + 8);
+        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH + 8);
         ctx.closePath();
         ctx.fillStyle = sec.accent;
         ctx.fill();
@@ -286,14 +368,14 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           originY
         );
 
-        // 4. Signboard & Logo Image or Letter Badge above Stall
-        const signY = center.y - roofH - 16;
+        // Logo Signboard Medallion
+        const signY = center.y - roofH - 18;
         ctx.beginPath();
-        ctx.arc(center.x, signY, 13, 0, Math.PI * 2);
-        ctx.fillStyle = "#0f172a";
+        ctx.arc(center.x, signY, 14, 0, Math.PI * 2);
+        ctx.fillStyle = "#090d1a";
         ctx.fill();
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.8;
+        ctx.strokeStyle = isNear ? "#facc15" : "#ffffff";
+        ctx.lineWidth = 2;
         ctx.stroke();
         ctx.lineWidth = 1;
 
@@ -301,9 +383,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(center.x, signY, 11, 0, Math.PI * 2);
+          ctx.arc(center.x, signY, 12, 0, Math.PI * 2);
           ctx.clip();
-          ctx.drawImage(cachedImg, center.x - 11, signY - 11, 22, 22);
+          ctx.drawImage(cachedImg, center.x - 12, signY - 12, 24, 24);
           ctx.restore();
         } else {
           ctx.font = "bold 11px system-ui, sans-serif";
@@ -312,47 +394,43 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           ctx.fillText(sec.logoText, center.x, signY + 4);
         }
 
-        // Stall Name Banner
+        // Store Signboard Pill Label
         ctx.font = "bold 11px system-ui, sans-serif";
         ctx.textAlign = "center";
+        const labelW = ctx.measureText(sec.name).width + 14;
+        ctx.fillStyle = "rgba(9, 13, 26, 0.88)";
+        ctx.beginPath();
+        ctx.roundRect(center.x - labelW / 2, center.y - roofH - 7, labelW, 17, 6);
+        ctx.fill();
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(sec.name, center.x, center.y - roofH + 3);
+        ctx.fillText(sec.name, center.x, center.y - roofH + 5);
 
-        // 5. Proximity Floating Popup Bubble when player walks close!
+        // Proximity Floating Popup Bubble when near store
         if (isNear) {
-          const popupText = `${sec.name}: ${sec.description.slice(0, 42)}${
-            sec.description.length > 42 ? "..." : ""
+          const popupText = `${sec.name}: ${sec.description.slice(0, 44)}${
+            sec.description.length > 44 ? "..." : ""
           }`;
           ctx.font = "bold 11px system-ui, sans-serif";
-          const textW = Math.min(260, ctx.measureText(popupText).width + 20);
-          const boxX = center.x - textW / 2;
-          const boxY = signY - 44;
+          const textW = Math.min(270, ctx.measureText(popupText).width + 22);
+          const boxX = Math.max(12, Math.min(cssW - textW - 12, center.x - textW / 2));
+          const boxY = Math.max(10, signY - 46);
 
-          ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+          ctx.fillStyle = "rgba(15, 23, 42, 0.96)";
           ctx.beginPath();
-          ctx.roundRect(boxX, boxY, textW, 26, 8);
+          ctx.roundRect(boxX, boxY, textW, 27, 8);
           ctx.fill();
           ctx.strokeStyle = "#38bdf8";
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.6;
           ctx.stroke();
           ctx.lineWidth = 1;
 
-          // Speech bubble pointer triangle
-          ctx.beginPath();
-          ctx.moveTo(center.x - 5, boxY + 26);
-          ctx.lineTo(center.x + 5, boxY + 26);
-          ctx.lineTo(center.x, boxY + 32);
-          ctx.closePath();
-          ctx.fillStyle = "#38bdf8";
-          ctx.fill();
-
           ctx.fillStyle = "#f8fafc";
           ctx.textAlign = "center";
-          ctx.fillText(popupText, center.x, boxY + 17);
+          ctx.fillText(popupText, boxX + textW / 2, boxY + 17.5);
         }
       });
 
-      // Draw Builders / Creators / Members with arm swing
+      // Builders / Creators / Members with animated arms
       members.forEach((m, index) => {
         const mPos = gridToIso(m.x, m.y, originX, originY);
         const w = m.bodyWidth;
@@ -365,7 +443,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
         ctx.beginPath();
         ctx.ellipse(mPos.x, mPos.y + 2, 10 * w, 5, 0, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? "rgba(250,204,21,0.55)" : "rgba(0,0,0,0.35)";
+        ctx.fillStyle = isSelected ? "rgba(250,204,21,0.55)" : "rgba(0,0,0,0.38)";
         ctx.fill();
 
         const shoulderY = mPos.y - 2 - torsoH + 3;
@@ -408,7 +486,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillText(`${m.name} (${m.role})`, mPos.x, headY - headR - 5);
       });
 
-      // Draw Player Avatar with walking arm & leg animation
+      // Player Avatar with animated arms & legs
       const pScreen = gridToIso(playerPos.current.gx, playerPos.current.gy, originX, originY);
       const wScale = avatar.bodyWidth;
       const hScale = avatar.bodyHeight;
@@ -472,6 +550,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.fillStyle = "#ffffff";
       ctx.fillText(avatar.name || "Citizen", pScreen.x, headY - headR - 6);
 
+      ctx.restore();
       animId = requestAnimationFrame(render);
     };
 
@@ -499,7 +578,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           color: "#e2e8f0",
         }}
       >
-        Walk near any stall for popup • Click stall or avatar for links
+        Walk near corner stores for popup • Click store or avatar for links
         {nearbySector && (
           <span style={{ marginLeft: 10, color: "#38bdf8" }}>
             Visiting: <b>{nearbySector.name}</b>
