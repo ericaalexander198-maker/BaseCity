@@ -24,6 +24,8 @@ interface BaseCityCanvasProps {
   onPlaceDecorAt: (gx: number, gy: number) => void;
   groundSize: CityGroundSize;
   marketSnapshot: BaseMarketSnapshot;
+  isSyncingMarket?: boolean;
+  onRefreshMarket?: () => void;
   selectedSector: CitySector | null;
   selectedMember: CityMember | null;
   onSelectSector: (sector: CitySector | null) => void;
@@ -44,7 +46,7 @@ interface RoomBox {
   labelColor: string;
   label: string;
   doorSide: "south" | "north" | "west" | "east";
-  doorSpan: number; // in grid tiles
+  doorSpan: number;
   deskAccentA: string;
   deskAccentB: string;
 }
@@ -56,8 +58,8 @@ const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
 };
 
 const TILE_SIZE = 32;
-const WALL_THICK = 0.28; // grid units
-const WALL_3D_HEIGHT = 12; // px extrusion for 3D-style front walls
+const WALL_THICK = 0.24;
+const WALL_3D_HEIGHT = 12;
 const STORE_MARGIN = 0.45;
 const MIN_ZOOM = 0.65;
 const MAX_ZOOM = 2.8;
@@ -76,7 +78,7 @@ const ROOMS: RoomBox[] = [
     labelColor: "#312e81",
     label: "BASE TEAM SETTLEMENT",
     doorSide: "south",
-    doorSpan: 2,
+    doorSpan: 2.6,
     deskAccentA: "#3b82f6",
     deskAccentB: "#6366f1",
   },
@@ -93,7 +95,7 @@ const ROOMS: RoomBox[] = [
     labelColor: "#1e293b",
     label: "BASE BUILDER LOUNGE",
     doorSide: "south",
-    doorSpan: 2,
+    doorSpan: 2.6,
     deskAccentA: "#0052FF",
     deskAccentB: "#0ea5e9",
   },
@@ -110,7 +112,7 @@ const ROOMS: RoomBox[] = [
     labelColor: "#78350f",
     label: "TEAM OPS & SQUAD",
     doorSide: "east",
-    doorSpan: 2,
+    doorSpan: 2.6,
     deskAccentA: "#f59e0b",
     deskAccentB: "#ea580c",
   },
@@ -127,7 +129,7 @@ const ROOMS: RoomBox[] = [
     labelColor: "#0c4a6e",
     label: "BUILDER SHIP ROOM",
     doorSide: "west",
-    doorSpan: 2,
+    doorSpan: 2.6,
     deskAccentA: "#0052FF",
     deskAccentB: "#10b981",
   },
@@ -144,7 +146,7 @@ const ROOMS: RoomBox[] = [
     labelColor: "#831843",
     label: "CREATORS CORNER",
     doorSide: "west",
-    doorSpan: 2.2,
+    doorSpan: 2.8,
     deskAccentA: "#ec4899",
     deskAccentB: "#f43f5e",
   },
@@ -165,7 +167,7 @@ function getDoorRange(room: RoomBox) {
   };
 }
 
-function isInDoorway(gx: number, gy: number, room: RoomBox, pad = 0.25): boolean {
+function isInsideDoorOpening(gx: number, gy: number, room: RoomBox, pad = 0.22): boolean {
   const door = getDoorRange(room);
   if (room.doorSide === "south") {
     return (
@@ -195,23 +197,24 @@ function isInDoorway(gx: number, gy: number, room: RoomBox, pad = 0.25): boolean
   );
 }
 
-function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.35): boolean {
-  if (isInDoorway(gx, gy, room)) return false;
+// Checks only the actual wall bands; leaves the doorway gap completely open
+function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.28): boolean {
+  if (isInsideDoorOpening(gx, gy, room)) return false;
 
-  const insideBox =
-    gx > room.gx - radius &&
-    gx < room.gx + room.gw + radius &&
-    gy > room.gy - radius &&
-    gy < room.gy + room.gh + radius;
+  const xMin = room.gx;
+  const xMax = room.gx + room.gw;
+  const yMin = room.gy;
+  const yMax = room.gy + room.gh;
 
-  if (!insideBox) return false;
+  const withinXBand = gx >= xMin - WALL_THICK - radius && gx <= xMax + WALL_THICK + radius;
+  const withinYBand = gy >= yMin - WALL_THICK - radius && gy <= yMax + WALL_THICK + radius;
 
-  const nearNorth = Math.abs(gy - room.gy) < WALL_THICK + radius;
-  const nearSouth = Math.abs(gy - (room.gy + room.gh)) < WALL_THICK + radius;
-  const nearWest = Math.abs(gx - room.gx) < WALL_THICK + radius;
-  const nearEast = Math.abs(gx - (room.gx + room.gw)) < WALL_THICK + radius;
+  const onNorthWall = withinXBand && Math.abs(gy - yMin) < WALL_THICK + radius;
+  const onSouthWall = withinXBand && Math.abs(gy - yMax) < WALL_THICK + radius;
+  const onWestWall = withinYBand && Math.abs(gx - xMin) < WALL_THICK + radius;
+  const onEastWall = withinYBand && Math.abs(gx - xMax) < WALL_THICK + radius;
 
-  return nearNorth || nearSouth || nearWest || nearEast;
+  return onNorthWall || onSouthWall || onWestWall || onEastWall;
 }
 
 function shadeHex(hex: string, percent: number): string {
@@ -293,6 +296,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   onPlaceDecorAt,
   groundSize,
   marketSnapshot,
+  isSyncingMarket = false,
+  onRefreshMarket,
   selectedSector,
   selectedMember,
   onSelectSector,
@@ -306,6 +311,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   const camOffset = useRef({ x: 0, y: 0 });
   const zoomRef = useRef(1.1);
   const [zoomDisplay, setZoomDisplay] = useState(110);
+  const [billboardOpen, setBillboardOpen] = useState(true);
   const keysPressed = useRef<Record<string, boolean>>({});
   const walkPhase = useRef(0);
   const logoCache = useRef<Record<string, HTMLImageElement>>({});
@@ -446,7 +452,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     ctx.lineWidth = 1;
   };
 
-  // Draws a 3D-extruded wall segment with top cap + front/side depth face
   const drawWallSegment3D = (
     ctx: CanvasRenderingContext2D,
     px: number,
@@ -457,11 +462,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     sideColor: string,
     hasFrontFace: boolean
   ) => {
+    if (pw <= 0 || ph <= 0) return;
     if (hasFrontFace) {
       ctx.fillStyle = sideColor;
-      ctx.fillRect(px, py + ph - 2, pw, WALL_3D_HEIGHT);
+      ctx.fillRect(px, py + ph - 1, pw, WALL_3D_HEIGHT);
       ctx.strokeStyle = "rgba(15, 23, 42, 0.35)";
-      ctx.strokeRect(px, py + ph - 2, pw, WALL_3D_HEIGHT);
+      ctx.strokeRect(px, py + ph - 1, pw, WALL_3D_HEIGHT);
     }
     ctx.fillStyle = topColor;
     ctx.fillRect(px, py, pw, ph);
@@ -481,11 +487,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const rh = room.gh * TILE_SIZE;
     const wt = WALL_THICK * TILE_SIZE;
 
-    // Room floor
     ctx.fillStyle = room.floor;
     ctx.fillRect(rx, ry, rw, rh);
 
-    // Desks inside room
     drawDeskSet(ctx, rx + 18, ry + 22, 44, 18, room.deskAccentA);
     if (room.gh >= 10) {
       drawDeskSet(ctx, rx + rw - 64, ry + 150, 44, 18, room.deskAccentB);
@@ -493,26 +497,33 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       drawDeskSet(ctx, rx + rw - 64, ry + 22, 44, 18, room.deskAccentB);
     }
 
-    // Room label
     ctx.font = "bold 9px system-ui, sans-serif";
     ctx.fillStyle = room.labelColor;
     ctx.textAlign = "left";
     ctx.fillText(room.label, rx + 10, ry + 13);
 
     const door = getDoorRange(room);
-    const dStartPx = originX + door.start * TILE_SIZE;
-    const dEndPx = originX + door.end * TILE_SIZE;
+    const dStartGridPx =
+      room.doorSide === "south" || room.doorSide === "north"
+        ? originX + door.start * TILE_SIZE
+        : originY + door.start * TILE_SIZE;
+    const dEndGridPx =
+      room.doorSide === "south" || room.doorSide === "north"
+        ? originX + door.end * TILE_SIZE
+        : originY + door.end * TILE_SIZE;
 
-    // Doorway threshold mat & door jamb posts
-    ctx.fillStyle = "#fde68a";
+    // North wall
+    drawWallSegment3D(ctx, rx - wt, ry - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, false);
+
+    // South wall with open doorway gap
     if (room.doorSide === "south") {
-      ctx.fillRect(dStartPx, ry + rh - wt, dEndPx - dStartPx, wt * 2);
-      // Left & right south wall segments around doorway
+      ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
+      ctx.fillRect(dStartGridPx, ry + rh - wt, dEndGridPx - dStartGridPx, wt);
       drawWallSegment3D(
         ctx,
         rx - wt,
         ry + rh - wt,
-        Math.max(0, dStartPx - (rx - wt)),
+        Math.max(0, dStartGridPx - (rx - wt)),
         wt,
         room.wallTop,
         room.wallSide,
@@ -520,9 +531,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       );
       drawWallSegment3D(
         ctx,
-        dEndPx,
+        dEndGridPx,
         ry + rh - wt,
-        Math.max(0, rx + rw + wt - dEndPx),
+        Math.max(0, rx + rw + wt - dEndGridPx),
         wt,
         room.wallTop,
         room.wallSide,
@@ -532,45 +543,71 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       drawWallSegment3D(ctx, rx - wt, ry + rh - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, true);
     }
 
-    // North wall
-    drawWallSegment3D(ctx, rx - wt, ry - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, false);
-
-    // West wall
+    // West wall with open doorway gap
     if (room.doorSide === "west") {
-      const topSegH = Math.max(0, dStartPx - (ry - wt));
-      const botSegY = dEndPx;
-      const botSegH = Math.max(0, ry + rh + wt - botSegY);
-      ctx.fillStyle = "#fde68a";
-      ctx.fillRect(originX + room.gx * TILE_SIZE - wt, dStartPx, wt * 2, dEndPx - dStartPx);
-      drawWallSegment3D(ctx, rx - wt, ry - wt, wt, topSegH, room.wallTop, room.wallSide, false);
-      drawWallSegment3D(ctx, rx - wt, botSegY, wt, botSegH, room.wallTop, room.wallSide, true);
+      ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
+      ctx.fillRect(rx - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+      drawWallSegment3D(
+        ctx,
+        rx - wt,
+        ry - wt,
+        wt,
+        Math.max(0, dStartGridPx - (ry - wt)),
+        room.wallTop,
+        room.wallSide,
+        false
+      );
+      drawWallSegment3D(
+        ctx,
+        rx - wt,
+        dEndGridPx,
+        wt,
+        Math.max(0, ry + rh + wt - dEndGridPx),
+        room.wallTop,
+        room.wallSide,
+        true
+      );
     } else {
       drawWallSegment3D(ctx, rx - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
     }
 
-    // East wall
+    // East wall with open doorway gap
     if (room.doorSide === "east") {
-      const topSegH = Math.max(0, dStartPx - (ry - wt));
-      const botSegY = dEndPx;
-      const botSegH = Math.max(0, ry + rh + wt - botSegY);
-      ctx.fillStyle = "#fde68a";
-      ctx.fillRect(originX + (room.gx + room.gw) * TILE_SIZE - wt, dStartPx, wt * 2, dEndPx - dStartPx);
-      drawWallSegment3D(ctx, rx + rw - wt, ry - wt, wt, topSegH, room.wallTop, room.wallSide, false);
-      drawWallSegment3D(ctx, rx + rw - wt, botSegY, wt, botSegH, room.wallTop, room.wallSide, true);
+      ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
+      ctx.fillRect(rx + rw - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+      drawWallSegment3D(
+        ctx,
+        rx + rw - wt,
+        ry - wt,
+        wt,
+        Math.max(0, dStartGridPx - (ry - wt)),
+        room.wallTop,
+        room.wallSide,
+        false
+      );
+      drawWallSegment3D(
+        ctx,
+        rx + rw - wt,
+        dEndGridPx,
+        wt,
+        Math.max(0, ry + rh + wt - dEndGridPx),
+        room.wallTop,
+        room.wallSide,
+        true
+      );
     } else {
       drawWallSegment3D(ctx, rx + rw - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
     }
 
-    // Door label badge
     ctx.font = "bold 8px system-ui, sans-serif";
     ctx.fillStyle = room.borderColor;
     ctx.textAlign = "center";
     if (room.doorSide === "south") {
-      ctx.fillText("DOOR ↕", (dStartPx + dEndPx) / 2, ry + rh + WALL_3D_HEIGHT + 8);
+      ctx.fillText("DOOR ↕", (dStartGridPx + dEndGridPx) / 2, ry + rh + WALL_3D_HEIGHT + 8);
     } else if (room.doorSide === "east") {
-      ctx.fillText("DOOR ↔", rx + rw + 18, (dStartPx + dEndPx) / 2 + 3);
+      ctx.fillText("DOOR ↔", rx + rw + 20, (dStartGridPx + dEndGridPx) / 2 + 3);
     } else if (room.doorSide === "west") {
-      ctx.fillText("DOOR ↔", rx - 20, (dStartPx + dEndPx) / 2 + 3);
+      ctx.fillText("DOOR ↔", rx - 20, (dStartGridPx + dEndGridPx) / 2 + 3);
     }
   };
 
@@ -865,7 +902,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       });
 
-      // Base TVL & Market Status Corner Board
       const tvlX = originX + 2 * TILE_SIZE;
       const tvlY = originY + 17 * TILE_SIZE;
       const tvlW = 8.5 * TILE_SIZE;
@@ -1143,6 +1179,147 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }}
       />
 
+      {/* Right Side DefiLlama Billboard */}
+      {!billboardOpen ? (
+        <button
+          type="button"
+          onClick={() => setBillboardOpen(true)}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            zIndex: 9,
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(56, 189, 248, 0.45)",
+            background: "rgba(15, 23, 42, 0.92)",
+            color: "#38bdf8",
+            fontWeight: 700,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          📊 DefiLlama Board ({marketSnapshot.tvl})
+        </button>
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            zIndex: 9,
+            width: 224,
+            background: "rgba(15, 23, 42, 0.94)",
+            border: "1px solid rgba(56, 189, 248, 0.4)",
+            borderRadius: 12,
+            padding: 12,
+            color: "#f8fafc",
+            fontSize: 12,
+            boxShadow: "0 10px 24px rgba(0, 0, 0, 0.35)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom: "1px solid rgba(148, 163, 184, 0.2)",
+              paddingBottom: 6,
+              marginBottom: 8,
+            }}
+          >
+            <span style={{ fontSize: 10, fontWeight: 800, color: "#38bdf8", letterSpacing: 0.4 }}>
+              DEFILLAMA • BASE BOARD
+            </span>
+            <button
+              type="button"
+              onClick={() => setBillboardOpen(false)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#94a3b8",
+                cursor: "pointer",
+                fontSize: 13,
+                lineHeight: 1,
+              }}
+              title="Minimize billboard"
+            >
+              —
+            </button>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+            <span style={{ color: "#94a3b8", fontSize: 11 }}>Chain TVL</span>
+            <strong style={{ fontSize: 16, color: "#ffffff" }}>{marketSnapshot.tvl}</strong>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 8 }}>
+            <span style={{ color: "#94a3b8" }}>Market Status</span>
+            <span
+              style={{
+                fontWeight: 700,
+                color:
+                  marketSnapshot.marketStatus === "BULLISH"
+                    ? "#4ade80"
+                    : marketSnapshot.marketStatus === "ACTIVE"
+                    ? "#38bdf8"
+                    : "#facc15",
+              }}
+            >
+              {marketSnapshot.marketStatus} ({marketSnapshot.tvlChange24h})
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 6,
+              background: "rgba(30, 41, 59, 0.75)",
+              borderRadius: 8,
+              padding: 8,
+              marginBottom: 8,
+              fontSize: 11,
+            }}
+          >
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 10 }}>Stables</div>
+              <strong>{marketSnapshot.stablecoins}</strong>
+            </div>
+            <div>
+              <div style={{ color: "#94a3b8", fontSize: 10 }}>24h DEX</div>
+              <strong>{marketSnapshot.dexVol24h}</strong>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ color: "#94a3b8", fontSize: 10 }}>24h Active Addresses</div>
+              <strong>{marketSnapshot.activeAddresses24h}</strong>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "#94a3b8" }}>
+            <span>{marketSnapshot.updatedLabel}</span>
+            {onRefreshMarket && (
+              <button
+                type="button"
+                onClick={onRefreshMarket}
+                disabled={isSyncingMarket}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #334155",
+                  background: "#1e293b",
+                  color: "#93c5fd",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {isSyncingMarket ? "Syncing..." : "↻ Sync"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           position: "absolute",
@@ -1230,7 +1407,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           </span>
         ) : (
           <span>
-            3D Room Walls + Doors • Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
+            Walk through room doors • Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
           </span>
         )}
         {nearbySector && (
