@@ -1,11 +1,33 @@
 import React, { useState } from "react";
 import { CityMember, CitySector, CityZone } from "../data/sectors";
 
+export type DecorKind =
+  | "pine_tree"
+  | "palm_tree"
+  | "bench"
+  | "lamp"
+  | "planter"
+  | "fountain"
+  | "umbrella";
+
+export interface CityDecorItem {
+  id: string;
+  kind: DecorKind;
+  label: string;
+  x: number;
+  y: number;
+}
+
 interface CityManagerToolProps {
   sectors: CitySector[];
   members: CityMember[];
+  decorItems: CityDecorItem[];
+  placingDecorKind: DecorKind | null;
+  onSelectPlacingDecorKind: (kind: DecorKind | null) => void;
   onAddSector: (sector: CitySector) => void;
   onAddMember: (member: CityMember) => void;
+  onAddDecor: (item: CityDecorItem) => void;
+  onClearCustomDecor: () => void;
 }
 
 const ZONES: CityZone[] = [
@@ -17,7 +39,16 @@ const ZONES: CityZone[] = [
 
 const COLORS = ["#0052FF", "#7C3AED", "#EC4899", "#0891B2", "#10B981", "#F59E0B"];
 
-// Corner & outer-edge slots so stores sit cleanly near corners without crowding center or overlapping
+const DECOR_OPTIONS: { kind: DecorKind; label: string; category: "Tree" | "Decor" }[] = [
+  { kind: "pine_tree", label: "Pine Tree", category: "Tree" },
+  { kind: "palm_tree", label: "Palm Tree", category: "Tree" },
+  { kind: "bench", label: "Park Bench", category: "Decor" },
+  { kind: "lamp", label: "Street Lamp", category: "Decor" },
+  { kind: "planter", label: "Flower Planter", category: "Decor" },
+  { kind: "fountain", label: "Plaza Fountain", category: "Decor" },
+  { kind: "umbrella", label: "Creator Umbrella", category: "Decor" },
+];
+
 const CORNER_SLOTS = [
   { x: 0.8, y: 0.8 },
   { x: 18.2, y: 0.8 },
@@ -34,10 +65,15 @@ const CORNER_SLOTS = [
 export const CityManagerTool: React.FC<CityManagerToolProps> = ({
   sectors,
   members,
+  decorItems,
+  placingDecorKind,
+  onSelectPlacingDecorKind,
   onAddSector,
   onAddMember,
+  onAddDecor,
+  onClearCustomDecor,
 }) => {
-  const [tab, setTab] = useState<"dapp" | "member">("dapp");
+  const [tab, setTab] = useState<"dapp" | "member" | "decor">("dapp");
 
   const [dappName, setDappName] = useState("");
   const [logoText, setLogoText] = useState("A");
@@ -55,6 +91,9 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
   const [bodyWidth, setBodyWidth] = useState(1.0);
   const [outfitColor, setOutfitColor] = useState("#10B981");
   const [visor, setVisor] = useState(true);
+
+  const [selectedDecorKind, setSelectedDecorKind] = useState<DecorKind>("pine_tree");
+  const [customLabel, setCustomLabel] = useState("");
 
   const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -143,6 +182,20 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
     setMemberLink("https://x.com/");
   };
 
+  const handleQuickDropDecor = () => {
+    const meta = DECOR_OPTIONS.find((d) => d.kind === selectedDecorKind)!;
+    const idx = decorItems.length;
+    const x = 4.5 + ((idx * 3.1) % 24);
+    const y = 3.5 + ((idx * 2.3) % 14);
+    onAddDecor({
+      id: `decor-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      kind: selectedDecorKind,
+      label: customLabel.trim() || meta.label,
+      x,
+      y,
+    });
+  };
+
   return (
     <div
       style={{
@@ -150,22 +203,25 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
         border: "1px solid rgba(148, 163, 184, 0.25)",
         borderRadius: 14,
         padding: 14,
-        width: 280,
+        width: 288,
         color: "#f8fafc",
         fontSize: 12,
       }}
     >
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: "#38bdf8" }}>
-        Add Corner Store or Citizen
+        Base City Builder Panel
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
         <button
           type="button"
-          onClick={() => setTab("dapp")}
+          onClick={() => {
+            setTab("dapp");
+            onSelectPlacingDecorKind(null);
+          }}
           style={{
             flex: 1,
-            padding: "6px 8px",
+            padding: "6px 6px",
             borderRadius: 8,
             border: "none",
             cursor: "pointer",
@@ -174,14 +230,17 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             color: "#fff",
           }}
         >
-          + dApp Store
+          + Store
         </button>
         <button
           type="button"
-          onClick={() => setTab("member")}
+          onClick={() => {
+            setTab("member");
+            onSelectPlacingDecorKind(null);
+          }}
           style={{
             flex: 1,
-            padding: "6px 8px",
+            padding: "6px 6px",
             borderRadius: 8,
             border: "none",
             cursor: "pointer",
@@ -190,11 +249,27 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             color: "#fff",
           }}
         >
-          + Builder/Creator
+          + Citizen
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("decor")}
+          style={{
+            flex: 1,
+            padding: "6px 6px",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            fontWeight: 600,
+            background: tab === "decor" ? "#10b981" : "#1e293b",
+            color: tab === "decor" ? "#052e16" : "#fff",
+          }}
+        >
+          + Trees/Decor
         </button>
       </div>
 
-      {tab === "dapp" ? (
+      {tab === "dapp" && (
         <form onSubmit={handleCreateDapp} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <input
             type="text"
@@ -212,16 +287,16 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
           />
           <label style={{ fontSize: 11, color: "#94a3b8", display: "flex", alignItems: "center", gap: 6 }}>
             <span>Or upload logo:</span>
-            <input type="file" accept="image/*" onChange={handleLogoFile} style={{ fontSize: 11, maxWidth: 165 }} />
+            <input type="file" accept="image/*" onChange={handleLogoFile} style={{ fontSize: 11, maxWidth: 170 }} />
           </label>
           <div style={{ display: "flex", gap: 6 }}>
             <input
               type="text"
-              placeholder="Badge (2 chars)"
+              placeholder="Badge"
               maxLength={2}
               value={logoText}
               onChange={(e) => setLogoText(e.target.value)}
-              style={{ width: 78, padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
+              style={{ width: 68, padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
             />
             <select
               value={zone}
@@ -274,7 +349,9 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             Place Corner Store
           </button>
         </form>
-      ) : (
+      )}
+
+      {tab === "member" && (
         <form onSubmit={handleCreateMember} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <input
             type="text"
@@ -359,6 +436,103 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             Add Avatar to City
           </button>
         </form>
+      )}
+
+      {tab === "decor" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ color: "#94a3b8", fontSize: 11 }}>
+            Pick a tree or decor item, then click on the map to place or use Auto Drop:
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+            {DECOR_OPTIONS.map((opt) => {
+              const active = selectedDecorKind === opt.kind;
+              return (
+                <button
+                  key={opt.kind}
+                  type="button"
+                  onClick={() => setSelectedDecorKind(opt.kind)}
+                  style={{
+                    padding: "6px 7px",
+                    borderRadius: 7,
+                    border: active ? "1.5px solid #38bdf8" : "1px solid #334155",
+                    background: active ? "#1e3a8a" : "#0f172a",
+                    color: "#f8fafc",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <input
+            type="text"
+            placeholder="Optional tag/note (e.g. Chill Spot)"
+            value={customLabel}
+            onChange={(e) => setCustomLabel(e.target.value)}
+            style={{ padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
+          />
+
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              onClick={() =>
+                onSelectPlacingDecorKind(
+                  placingDecorKind === selectedDecorKind ? null : selectedDecorKind
+                )
+              }
+              style={{
+                flex: 1,
+                padding: "7px 8px",
+                borderRadius: 8,
+                border: "none",
+                background: placingDecorKind === selectedDecorKind ? "#facc15" : "#0052FF",
+                color: placingDecorKind === selectedDecorKind ? "#0f172a" : "#ffffff",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {placingDecorKind === selectedDecorKind ? "Click Map Active ✓" : "Click-to-Place"}
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickDropDecor}
+              style={{
+                padding: "7px 10px",
+                borderRadius: 8,
+                border: "none",
+                background: "#10b981",
+                color: "#052e16",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              + Drop
+            </button>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "#94a3b8" }}>
+            <span>Placed items: {decorItems.length}</span>
+            <button
+              type="button"
+              onClick={onClearCustomDecor}
+              style={{
+                padding: "3px 8px",
+                borderRadius: 6,
+                border: "1px solid #475569",
+                background: "transparent",
+                color: "#fca5a5",
+                cursor: "pointer",
+              }}
+            >
+              Reset Decor
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
