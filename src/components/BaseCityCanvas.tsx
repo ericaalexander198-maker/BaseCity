@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { CityMember, CitySector } from "../data/sectors";
 import { AvatarConfig } from "./AvatarCustomizer";
+import { CityThemeConfig } from "./CityCustomizerDrawer";
 import { CityDecorItem, DecorKind } from "./CityManagerTool";
 
 export type CityGroundSize = "compact" | "standard" | "mega";
@@ -17,6 +18,7 @@ export interface BaseMarketSnapshot {
 
 interface BaseCityCanvasProps {
   avatar: AvatarConfig;
+  theme: CityThemeConfig;
   sectors: CitySector[];
   members: CityMember[];
   decorItems: CityDecorItem[];
@@ -52,25 +54,24 @@ interface RoomBox {
 }
 
 const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
-  compact: { cols: 30, rows: 20 },
-  standard: { cols: 38, rows: 24 },
-  mega: { cols: 48, rows: 30 },
+  compact: { cols: 38, rows: 24 },
+  standard: { cols: 50, rows: 32 },
+  mega: { cols: 64, rows: 40 },
 };
 
-const TILE_SIZE = 32;
+const TILE_SIZE = 34;
 const WALL_THICK = 0.24;
-const WALL_3D_HEIGHT = 12;
 const STORE_MARGIN = 0.45;
-const MIN_ZOOM = 0.65;
+const MIN_ZOOM = 0.45;
 const MAX_ZOOM = 2.8;
 
 const ROOMS: RoomBox[] = [
   {
     id: "team-settlement",
-    gx: 2,
-    gy: 2,
-    gw: 8,
-    gh: 6,
+    gx: 3,
+    gy: 3,
+    gw: 11,
+    gh: 8,
     floor: "#e0e7ff",
     wallTop: "#a5b4fc",
     wallSide: "#6366f1",
@@ -78,16 +79,16 @@ const ROOMS: RoomBox[] = [
     labelColor: "#312e81",
     label: "BASE TEAM SETTLEMENT",
     doorSide: "south",
-    doorSpan: 2.6,
+    doorSpan: 3.0,
     deskAccentA: "#3b82f6",
     deskAccentB: "#6366f1",
   },
   {
     id: "builder-lounge",
-    gx: 12,
-    gy: 2,
-    gw: 9,
-    gh: 6,
+    gx: 17,
+    gy: 3,
+    gw: 12,
+    gh: 8,
     floor: "#f1f5f9",
     wallTop: "#cbd5e1",
     wallSide: "#64748b",
@@ -95,16 +96,16 @@ const ROOMS: RoomBox[] = [
     labelColor: "#1e293b",
     label: "BASE BUILDER LOUNGE",
     doorSide: "south",
-    doorSpan: 2.6,
+    doorSpan: 3.0,
     deskAccentA: "#0052FF",
     deskAccentB: "#0ea5e9",
   },
   {
     id: "ops-squad",
-    gx: 2,
-    gy: 10,
-    gw: 8,
-    gh: 6,
+    gx: 3,
+    gy: 14,
+    gw: 11,
+    gh: 8,
     floor: "#fef3c7",
     wallTop: "#fcd34d",
     wallSide: "#d97706",
@@ -112,16 +113,16 @@ const ROOMS: RoomBox[] = [
     labelColor: "#78350f",
     label: "TEAM OPS & SQUAD",
     doorSide: "east",
-    doorSpan: 2.6,
+    doorSpan: 3.0,
     deskAccentA: "#f59e0b",
     deskAccentB: "#ea580c",
   },
   {
     id: "core-builder-hub",
-    gx: 12,
-    gy: 10,
-    gw: 9,
-    gh: 6,
+    gx: 17,
+    gy: 14,
+    gw: 12,
+    gh: 8,
     floor: "#e0f2fe",
     wallTop: "#7dd3fc",
     wallSide: "#0284c7",
@@ -129,16 +130,16 @@ const ROOMS: RoomBox[] = [
     labelColor: "#0c4a6e",
     label: "BUILDER SHIP ROOM",
     doorSide: "west",
-    doorSpan: 2.6,
+    doorSpan: 3.0,
     deskAccentA: "#0052FF",
     deskAccentB: "#10b981",
   },
   {
     id: "creators-corner",
-    gx: 23,
-    gy: 2,
-    gw: 7,
-    gh: 14,
+    gx: 32,
+    gy: 3,
+    gw: 10,
+    gh: 19,
     floor: "#fce7f3",
     wallTop: "#f9a8d4",
     wallSide: "#db2777",
@@ -146,7 +147,7 @@ const ROOMS: RoomBox[] = [
     labelColor: "#831843",
     label: "CREATORS CORNER",
     doorSide: "west",
-    doorSpan: 2.8,
+    doorSpan: 3.2,
     deskAccentA: "#ec4899",
     deskAccentB: "#f43f5e",
   },
@@ -167,7 +168,7 @@ function getDoorRange(room: RoomBox) {
   };
 }
 
-function isInsideDoorOpening(gx: number, gy: number, room: RoomBox, pad = 0.22): boolean {
+function isInsideDoorOpening(gx: number, gy: number, room: RoomBox, pad = 0.25): boolean {
   const door = getDoorRange(room);
   if (room.doorSide === "south") {
     return (
@@ -197,8 +198,7 @@ function isInsideDoorOpening(gx: number, gy: number, room: RoomBox, pad = 0.22):
   );
 }
 
-// Checks only the actual wall bands; leaves the doorway gap completely open
-function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.28): boolean {
+function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.26): boolean {
   if (isInsideDoorOpening(gx, gy, room)) return false;
 
   const xMin = room.gx;
@@ -289,6 +289,7 @@ function resolveCollision(
 
 export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   avatar,
+  theme,
   sectors,
   members,
   decorItems,
@@ -306,11 +307,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 }) => {
   const { cols: gridCols, rows: gridRows } = GROUND_DIMS[groundSize];
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const playerPos = useRef({ gx: 14.0, gy: 9.0 });
+  const playerPos = useRef({ gx: 15.5, gy: 12.5 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const camOffset = useRef({ x: 0, y: 0 });
-  const zoomRef = useRef(1.1);
-  const [zoomDisplay, setZoomDisplay] = useState(110);
+  const zoomRef = useRef(0.85);
+  const [zoomDisplay, setZoomDisplay] = useState(85);
   const [billboardOpen, setBillboardOpen] = useState(true);
   const keysPressed = useRef<Record<string, boolean>>({});
   const walkPhase = useRef(0);
@@ -393,7 +394,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       return;
     }
 
-    if (clampedX >= 2 && clampedX <= 10.5 && clampedY >= 17 && clampedY <= 20.2) {
+    if (clampedX >= 3 && clampedX <= 12.5 && clampedY >= 24 && clampedY <= 27.5) {
       onOpenMarketCorner?.();
     }
 
@@ -465,9 +466,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     if (pw <= 0 || ph <= 0) return;
     if (hasFrontFace) {
       ctx.fillStyle = sideColor;
-      ctx.fillRect(px, py + ph - 1, pw, WALL_3D_HEIGHT);
+      ctx.fillRect(px, py + ph - 1, pw, theme.wallExtrudeHeight);
       ctx.strokeStyle = "rgba(15, 23, 42, 0.35)";
-      ctx.strokeRect(px, py + ph - 1, pw, WALL_3D_HEIGHT);
+      ctx.strokeRect(px, py + ph - 1, pw, theme.wallExtrudeHeight);
     }
     ctx.fillStyle = topColor;
     ctx.fillRect(px, py, pw, ph);
@@ -490,17 +491,17 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     ctx.fillStyle = room.floor;
     ctx.fillRect(rx, ry, rw, rh);
 
-    drawDeskSet(ctx, rx + 18, ry + 22, 44, 18, room.deskAccentA);
-    if (room.gh >= 10) {
-      drawDeskSet(ctx, rx + rw - 64, ry + 150, 44, 18, room.deskAccentB);
+    drawDeskSet(ctx, rx + 22, ry + 26, 48, 20, room.deskAccentA);
+    if (room.gh >= 12) {
+      drawDeskSet(ctx, rx + rw - 72, ry + 190, 48, 20, room.deskAccentB);
     } else {
-      drawDeskSet(ctx, rx + rw - 64, ry + 22, 44, 18, room.deskAccentB);
+      drawDeskSet(ctx, rx + rw - 72, ry + 26, 48, 20, room.deskAccentB);
     }
 
-    ctx.font = "bold 9px system-ui, sans-serif";
+    ctx.font = "bold 10px system-ui, sans-serif";
     ctx.fillStyle = room.labelColor;
     ctx.textAlign = "left";
-    ctx.fillText(room.label, rx + 10, ry + 13);
+    ctx.fillText(room.label, rx + 12, ry + 15);
 
     const door = getDoorRange(room);
     const dStartGridPx =
@@ -512,13 +513,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ? originX + door.end * TILE_SIZE
         : originY + door.end * TILE_SIZE;
 
-    // North wall
     drawWallSegment3D(ctx, rx - wt, ry - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, false);
 
-    // South wall with open doorway gap
     if (room.doorSide === "south") {
-      ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-      ctx.fillRect(dStartGridPx, ry + rh - wt, dEndGridPx - dStartGridPx, wt);
+      if (theme.showRoomDoors) {
+        ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
+        ctx.fillRect(dStartGridPx, ry + rh - wt, dEndGridPx - dStartGridPx, wt);
+      }
       drawWallSegment3D(
         ctx,
         rx - wt,
@@ -543,10 +544,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       drawWallSegment3D(ctx, rx - wt, ry + rh - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, true);
     }
 
-    // West wall with open doorway gap
     if (room.doorSide === "west") {
-      ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-      ctx.fillRect(rx - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+      if (theme.showRoomDoors) {
+        ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
+        ctx.fillRect(rx - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+      }
       drawWallSegment3D(
         ctx,
         rx - wt,
@@ -571,10 +573,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       drawWallSegment3D(ctx, rx - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
     }
 
-    // East wall with open doorway gap
     if (room.doorSide === "east") {
-      ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-      ctx.fillRect(rx + rw - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+      if (theme.showRoomDoors) {
+        ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
+        ctx.fillRect(rx + rw - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+      }
       drawWallSegment3D(
         ctx,
         rx + rw - wt,
@@ -597,17 +600,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       );
     } else {
       drawWallSegment3D(ctx, rx + rw - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
-    }
-
-    ctx.font = "bold 8px system-ui, sans-serif";
-    ctx.fillStyle = room.borderColor;
-    ctx.textAlign = "center";
-    if (room.doorSide === "south") {
-      ctx.fillText("DOOR ↕", (dStartGridPx + dEndGridPx) / 2, ry + rh + WALL_3D_HEIGHT + 8);
-    } else if (room.doorSide === "east") {
-      ctx.fillText("DOOR ↔", rx + rw + 20, (dStartGridPx + dEndGridPx) / 2 + 3);
-    } else if (room.doorSide === "west") {
-      ctx.fillText("DOOR ↔", rx - 20, (dStartGridPx + dEndGridPx) / 2 + 3);
     }
   };
 
@@ -775,7 +767,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.scale(dpr, dpr);
       ctx.imageSmoothingEnabled = false;
 
-      const speed = 0.11;
+      const speed = 0.14;
       let dx = 0;
       let dy = 0;
       let isMoving = false;
@@ -840,8 +832,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       const { originX: baseOriginX, originY: baseOriginY } = getMapOrigin(cssW, cssH);
       const pWorldX = baseOriginX + playerPos.current.gx * TILE_SIZE;
       const pWorldY = baseOriginY + playerPos.current.gy * TILE_SIZE;
-      const desiredCamX = Math.max(-240, Math.min(240, (cssW / 2 - pWorldX) * 0.45));
-      const desiredCamY = Math.max(-160, Math.min(160, (cssH / 2 - pWorldY) * 0.45));
+      const desiredCamX = Math.max(-360, Math.min(360, (cssW / 2 - pWorldX) * 0.55));
+      const desiredCamY = Math.max(-240, Math.min(240, (cssH / 2 - pWorldY) * 0.55));
       camOffset.current.x += (desiredCamX - camOffset.current.x) * 0.08;
       camOffset.current.y += (desiredCamY - camOffset.current.y) * 0.08;
 
@@ -849,13 +841,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         sectors.find((s) => {
           const cx = s.x + s.width / 2;
           const cy = s.y + s.height / 2;
-          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 3.4;
+          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 3.6;
         }) || null;
 
       setNearbySector((prev) => (prev?.id === foundNear?.id ? prev : foundNear));
 
       ctx.clearRect(0, 0, cssW, cssH);
-      ctx.fillStyle = "#dcfce7";
+      ctx.fillStyle = theme.grassSecondary;
       ctx.fillRect(0, 0, cssW, cssH);
 
       const z = zoomRef.current;
@@ -874,14 +866,16 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           const inCampus = r >= 1 && r < campusRows && c >= 1 && c < campusCols;
 
           if (!inCampus) {
-            ctx.fillStyle = (r + c) % 2 === 0 ? "#bbf7d0" : "#86efac";
+            ctx.fillStyle = (r + c) % 2 === 0 ? theme.grassPrimary : theme.grassSecondary;
             ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
           } else {
-            ctx.fillStyle = (r + c) % 2 === 0 ? "#f8fafc" : "#f1f5f9";
+            ctx.fillStyle = (r + c) % 2 === 0 ? theme.streetPrimary : theme.streetSecondary;
             ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-            ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-            ctx.lineWidth = 1 / z;
-            ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+            if (theme.showGrid) {
+              ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+              ctx.lineWidth = 1 / z;
+              ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+            }
           }
         }
       }
@@ -902,11 +896,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       });
 
-      const tvlX = originX + 2 * TILE_SIZE;
-      const tvlY = originY + 17 * TILE_SIZE;
-      const tvlW = 8.5 * TILE_SIZE;
-      const tvlH = 3.2 * TILE_SIZE;
-      if (2 + 8.5 <= campusCols && 17 + 3.2 <= campusRows) {
+      const tvlX = originX + 3 * TILE_SIZE;
+      const tvlY = originY + 24 * TILE_SIZE;
+      const tvlW = 9.5 * TILE_SIZE;
+      const tvlH = 3.5 * TILE_SIZE;
+      if (3 + 9.5 <= campusCols && 24 + 3.5 <= campusRows) {
         ctx.fillStyle = "#0f172a";
         ctx.fillRect(tvlX, tvlY, tvlW, tvlH);
         ctx.strokeStyle = "#38bdf8";
@@ -914,10 +908,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.strokeRect(tvlX, tvlY, tvlW, tvlH);
         ctx.lineWidth = 1;
 
-        ctx.font = "bold 9px system-ui, sans-serif";
+        ctx.font = "bold 10px system-ui, sans-serif";
         ctx.fillStyle = "#38bdf8";
         ctx.textAlign = "left";
-        ctx.fillText("BASE TVL & MARKET CORNER", tvlX + 10, tvlY + 14);
+        ctx.fillText("BASE TVL & MARKET CORNER", tvlX + 12, tvlY + 16);
 
         ctx.fillStyle =
           marketSnapshot.marketStatus === "BULLISH"
@@ -925,28 +919,28 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
             : marketSnapshot.marketStatus === "ACTIVE"
             ? "#38bdf8"
             : "#facc15";
-        ctx.fillText(marketSnapshot.marketStatus, tvlX + tvlW - 62, tvlY + 14);
+        ctx.fillText(marketSnapshot.marketStatus, tvlX + tvlW - 68, tvlY + 16);
 
-        ctx.font = "bold 13px system-ui, sans-serif";
+        ctx.font = "bold 14px system-ui, sans-serif";
         ctx.fillStyle = "#f8fafc";
         ctx.fillText(
           `TVL: ${marketSnapshot.tvl} (${marketSnapshot.tvlChange24h})`,
-          tvlX + 10,
-          tvlY + 35
+          tvlX + 12,
+          tvlY + 40
         );
 
-        ctx.font = "10px system-ui, sans-serif";
+        ctx.font = "11px system-ui, sans-serif";
         ctx.fillStyle = "#cbd5e1";
         ctx.fillText(
           `Stables: ${marketSnapshot.stablecoins} • 24h DEX: ${marketSnapshot.dexVol24h}`,
-          tvlX + 10,
-          tvlY + 53
+          tvlX + 12,
+          tvlY + 62
         );
         ctx.fillStyle = "#94a3b8";
         ctx.fillText(
           `Active Addrs: ${marketSnapshot.activeAddresses24h} • ${marketSnapshot.updatedLabel}`,
-          tvlX + 10,
-          tvlY + 69
+          tvlX + 12,
+          tvlY + 82
         );
       }
 
@@ -1007,28 +1001,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillStyle = "#0f172a";
         ctx.textAlign = "center";
         ctx.fillText(sec.name, badgeX, badgeY + 23);
-
-        if (isNear) {
-          const popupText = `${sec.name}: ${sec.description.slice(0, 42)}${
-            sec.description.length > 42 ? "..." : ""
-          }`;
-          ctx.font = "bold 11px system-ui, sans-serif";
-          const textW = Math.min(265, ctx.measureText(popupText).width + 20);
-          const boxX = badgeX - textW / 2;
-          const boxY = sy - 32;
-
-          ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
-          ctx.beginPath();
-          ctx.roundRect(boxX, boxY, textW, 24, 7);
-          ctx.fill();
-          ctx.strokeStyle = "#38bdf8";
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          ctx.lineWidth = 1;
-
-          ctx.fillStyle = "#f8fafc";
-          ctx.fillText(popupText, boxX + textW / 2, boxY + 15.5);
-        }
       });
 
       members.forEach((m, index) => {
@@ -1154,6 +1126,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [
     avatar,
+    theme,
     sectors,
     members,
     decorItems,
@@ -1179,7 +1152,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }}
       />
 
-      {/* Right Side DefiLlama Billboard */}
       {!billboardOpen ? (
         <button
           type="button"
@@ -1373,7 +1345,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => setZoom(1.0)}
+          onClick={() => setZoom(0.85)}
           style={{
             padding: "3px 7px",
             borderRadius: 6,
@@ -1407,7 +1379,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           </span>
         ) : (
           <span>
-            Walk through room doors • Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
+            {gridCols}×{gridRows} Metropolis • Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
           </span>
         )}
         {nearbySector && (
