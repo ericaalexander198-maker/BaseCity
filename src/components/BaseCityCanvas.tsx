@@ -17,6 +17,8 @@ const GRID_ROWS = 24;
 const TILE_W = 48;
 const TILE_H = 24;
 const STORE_MARGIN = 0.45;
+const MIN_ZOOM = 0.65;
+const MAX_ZOOM = 2.8;
 
 const PALM_SPOTS = [
   { x: 4.2, y: 1.5 },
@@ -119,10 +121,18 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   const playerPos = useRef({ gx: 15.5, gy: 11.5 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const camOffset = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1.15);
+  const [zoomDisplay, setZoomDisplay] = useState(115);
   const keysPressed = useRef<Record<string, boolean>>({});
   const walkPhase = useRef(0);
   const logoCache = useRef<Record<string, HTMLImageElement>>({});
   const [nearbySector, setNearbySector] = useState<CitySector | null>(null);
+
+  const setZoom = (next: number) => {
+    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(next.toFixed(2))));
+    zoomRef.current = clamped;
+    setZoomDisplay(Math.round(clamped * 100));
+  };
 
   useEffect(() => {
     sectors.forEach((sec) => {
@@ -151,10 +161,27 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     };
   }, []);
 
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.12 : -0.12;
+    setZoom(zoomRef.current + delta);
+  };
+
   const getMapOrigin = (cssW: number) => ({
     originX: cssW / 2 + camOffset.current.x,
     originY: 68 + camOffset.current.y,
   });
+
+  // Convert screen click coordinates back through zoom transform into world coordinates
+  const screenToWorld = (sx: number, sy: number, cssW: number, cssH: number) => {
+    const z = zoomRef.current;
+    const cx = cssW / 2;
+    const cy = cssH / 2;
+    return {
+      wx: (sx - cx) / z + cx,
+      wy: (sy - cy) / z + cy,
+    };
+  };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -162,9 +189,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    const { wx, wy } = screenToWorld(sx, sy, rect.width, rect.height);
     const { originX, originY } = getMapOrigin(rect.width);
 
-    const { gx, gy } = isoToGrid(sx, sy, originX, originY);
+    const { gx, gy } = isoToGrid(wx, wy, originX, originY);
     const clampedX = Math.max(0.6, Math.min(GRID_COLS - 1.2, gx));
     const clampedY = Math.max(0.6, Math.min(GRID_ROWS - 1.2, gy));
 
@@ -272,15 +300,20 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
       const cssW = canvas.clientWidth || 900;
       const cssH = canvas.clientHeight || 560;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Full uncapped devicePixelRatio so browser zoom + canvas zoom stay 100% razor-sharp
+      const dpr = window.devicePixelRatio || 1;
+      const targetW = Math.round(cssW * dpr);
+      const targetH = Math.round(cssH * dpr);
 
-      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssH * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
       }
 
       ctx.save();
       ctx.scale(dpr, dpr);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
       const speed = 0.09;
       let dx = 0;
@@ -326,10 +359,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         walkPhase.current += 0.03;
       }
 
-      // Gently follow player so big 32x24 city stays comfortably centered
       const pIsoPreview = gridToIso(playerPos.current.gx, playerPos.current.gy, cssW / 2, 68);
-      const desiredCamX = Math.max(-260, Math.min(260, cssW / 2 - pIsoPreview.x));
-      const desiredCamY = Math.max(-140, Math.min(120, cssH * 0.52 - pIsoPreview.y));
+      const desiredCamX = Math.max(-280, Math.min(280, cssW / 2 - pIsoPreview.x));
+      const desiredCamY = Math.max(-160, Math.min(140, cssH * 0.52 - pIsoPreview.y));
       camOffset.current.x += (desiredCamX - camOffset.current.x) * 0.08;
       camOffset.current.y += (desiredCamY - camOffset.current.y) * 0.08;
 
@@ -344,7 +376,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
       ctx.clearRect(0, 0, cssW, cssH);
 
-      // Vibrant Base City Sunset / Onchain Sky Gradient
+      // Background sky fills full viewport cleanly
       const skyGrad = ctx.createLinearGradient(0, 0, 0, cssH);
       skyGrad.addColorStop(0, "#311042");
       skyGrad.addColorStop(0.35, "#7e22ce");
@@ -353,9 +385,14 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, cssW, cssH);
 
+      // Apply Crisp Vector Zoom around viewport center
+      const z = zoomRef.current;
+      ctx.translate(cssW / 2, cssH / 2);
+      ctx.scale(z, z);
+      ctx.translate(-cssW / 2, -cssH / 2);
+
       const { originX, originY } = getMapOrigin(cssW);
 
-      // Big 32x24 City Ground: Plaza, Boulevards, Sandy Beach, Ocean
       for (let r = 0; r < GRID_ROWS; r++) {
         for (let c = 0; c < GRID_COLS; c++) {
           const p0 = gridToIso(c, r, originX, originY);
@@ -365,15 +402,15 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
           let tileFill = (r + c) % 2 === 0 ? "#cbd5e1" : "#94a3b8";
           if (r >= 14 && r <= 15) {
-            tileFill = "#1e293b"; // Main avenue
+            tileFill = "#1e293b";
           } else if (r >= 16 && r <= 19) {
-            tileFill = (r + c) % 2 === 0 ? "#fde68a" : "#fcd34d"; // Beach sand
+            tileFill = (r + c) % 2 === 0 ? "#fde68a" : "#fcd34d";
           } else if (r >= 20) {
-            tileFill = (r + c) % 2 === 0 ? "#06b6d4" : "#0284c7"; // Ocean water
+            tileFill = (r + c) % 2 === 0 ? "#06b6d4" : "#0284c7";
           } else if (c === 15 || c === 16) {
-            tileFill = "#1e293b"; // Cross street
+            tileFill = "#1e293b";
           } else if (r >= 6 && r <= 11 && c >= 10 && c <= 21) {
-            tileFill = (r + c) % 2 === 0 ? "#86efac" : "#4ade80"; // Central park lawn
+            tileFill = (r + c) % 2 === 0 ? "#86efac" : "#4ade80";
           }
 
           ctx.beginPath();
@@ -385,11 +422,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           ctx.fillStyle = tileFill;
           ctx.fill();
           ctx.strokeStyle = "rgba(15, 23, 42, 0.14)";
+          ctx.lineWidth = 1 / z;
           ctx.stroke();
         }
       }
+      ctx.lineWidth = 1;
 
-      // Street lamps & beach umbrellas / volleyball net
       LAMP_SPOTS.forEach((lp) => {
         const pos = gridToIso(lp.x, lp.y, originX, originY);
         ctx.strokeStyle = "#f8fafc";
@@ -405,7 +443,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.lineWidth = 1;
       });
 
-      // Beach volleyball net & umbrella props
       const netA = gridToIso(11, 17.5, originX, originY);
       const netB = gridToIso(15, 17.5, originX, originY);
       ctx.strokeStyle = "#ffffff";
@@ -420,12 +457,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.stroke();
       ctx.lineWidth = 1;
 
-      // Animated street cars
       const carOffset = ((walkPhase.current * 14) % 24) + 3;
       drawCar(ctx, carOffset, 14.4, originX, originY, "#f43f5e");
       drawCar(ctx, 28 - (carOffset % 22), 15.3, originX, originY, "#facc15");
 
-      // Palm trees around city & beach
       const sway = Math.sin(walkPhase.current * 0.6) * 2.5;
       PALM_SPOTS.forEach((pt) => drawPalmTree(ctx, pt.x, pt.y, originX, originY, sway));
 
@@ -453,7 +488,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.closePath();
         ctx.fillStyle = "rgba(15, 23, 42, 0.32)";
         ctx.fill();
-        ctx.lineWidth = isSelected || isNear ? 2.5 : 1;
+        ctx.lineWidth = (isSelected || isNear ? 2.5 : 1) / z;
         ctx.strokeStyle = isSelected || isNear ? "#facc15" : "rgba(15,23,42,0.35)";
         ctx.stroke();
         ctx.lineWidth = 1;
@@ -586,8 +621,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           }`;
           ctx.font = "bold 11px system-ui, sans-serif";
           const textW = Math.min(270, ctx.measureText(popupText).width + 22);
-          const boxX = Math.max(12, Math.min(cssW - textW - 12, center.x - textW / 2));
-          const boxY = Math.max(10, signY - 46);
+          const boxX = center.x - textW / 2;
+          const boxY = signY - 46;
 
           ctx.fillStyle = "rgba(15, 23, 42, 0.96)";
           ctx.beginPath();
@@ -604,7 +639,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       });
 
-      // Builders / Creators / Members (stationary with subtle selected wave)
+      // Builders / Creators / Members
       members.forEach((m, index) => {
         const mPos = gridToIso(m.x, m.y, originX, originY);
         const w = m.bodyWidth;
@@ -734,28 +769,4 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       <canvas
         ref={canvasRef}
         onClick={handleCanvasClick}
-        style={{ width: "100%", height: "100%", display: "block", cursor: "pointer" }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          bottom: 12,
-          left: 12,
-          background: "rgba(15, 23, 42, 0.85)",
-          border: "1px solid rgba(148, 163, 184, 0.25)",
-          borderRadius: 10,
-          padding: "8px 12px",
-          fontSize: 12,
-          color: "#e2e8f0",
-        }}
-      >
-        Big 32×24 Base City • Camera follows you • Walk or click to explore
-        {nearbySector && (
-          <span style={{ marginLeft: 10, color: "#38bdf8" }}>
-            Near: <b>{nearbySector.name}</b>
-          </span>
-        )}
-      </div>
-    </div>
-  );
-};
+        onWheel={handleWheel}
