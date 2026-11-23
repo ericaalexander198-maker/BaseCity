@@ -6,6 +6,10 @@ import {
   CityGroundSize,
 } from "./components/BaseCityCanvas";
 import {
+  CityCustomizerDrawer,
+  CityThemeConfig,
+} from "./components/CityCustomizerDrawer";
+import {
   CityDecorItem,
   CityManagerTool,
   DecorKind,
@@ -26,9 +30,20 @@ declare global {
 }
 
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 (Base Mainnet)
-const STORAGE_SECTORS_KEY = "base_city_sectors_v1";
-const STORAGE_MEMBERS_KEY = "base_city_members_v1";
-const STORAGE_DECOR_KEY = "base_city_decor_v1";
+const STORAGE_SECTORS_KEY = "base_city_sectors_v2";
+const STORAGE_MEMBERS_KEY = "base_city_members_v2";
+const STORAGE_DECOR_KEY = "base_city_decor_v2";
+const STORAGE_THEME_KEY = "base_city_theme_v1";
+
+const DEFAULT_THEME: CityThemeConfig = {
+  grassPrimary: "#bbf7d0",
+  grassSecondary: "#86efac",
+  streetPrimary: "#f8fafc",
+  streetSecondary: "#f1f5f9",
+  wallExtrudeHeight: 12,
+  showGrid: true,
+  showRoomDoors: true,
+};
 
 const DEFAULT_MARKET_SNAPSHOT: BaseMarketSnapshot = {
   tvl: "$5.15B",
@@ -41,17 +56,17 @@ const DEFAULT_MARKET_SNAPSHOT: BaseMarketSnapshot = {
 };
 
 const INITIAL_DECOR: CityDecorItem[] = [
-  { id: "d-1", kind: "pine_tree", label: "Pine Tree", x: 31.5, y: 2.2 },
-  { id: "d-2", kind: "pine_tree", label: "Pine Tree", x: 34.5, y: 1.8 },
-  { id: "d-3", kind: "palm_tree", label: "Palm Tree", x: 32.5, y: 6.5 },
-  { id: "d-4", kind: "pine_tree", label: "Pine Tree", x: 35.2, y: 8.8 },
-  { id: "d-5", kind: "palm_tree", label: "Palm Tree", x: 31.8, y: 14.5 },
-  { id: "d-6", kind: "pine_tree", label: "Pine Tree", x: 35.0, y: 17.5 },
-  { id: "d-7", kind: "bench", label: "Park Bench", x: 11.2, y: 9.2 },
-  { id: "d-8", kind: "lamp", label: "Street Lamp", x: 11.2, y: 17.2 },
-  { id: "d-9", kind: "planter", label: "Flower Planter", x: 21.6, y: 9.2 },
-  { id: "d-10", kind: "fountain", label: "Plaza Fountain", x: 16.5, y: 17.2 },
-  { id: "d-11", kind: "umbrella", label: "Creator Umbrella", x: 26.2, y: 12.5 },
+  { id: "d-1", kind: "pine_tree", label: "Pine Tree", x: 45.0, y: 4.0 },
+  { id: "d-2", kind: "pine_tree", label: "Pine Tree", x: 49.0, y: 3.5 },
+  { id: "d-3", kind: "palm_tree", label: "Palm Tree", x: 46.5, y: 10.0 },
+  { id: "d-4", kind: "pine_tree", label: "Pine Tree", x: 51.0, y: 14.0 },
+  { id: "d-5", kind: "palm_tree", label: "Palm Tree", x: 45.5, y: 21.0 },
+  { id: "d-6", kind: "pine_tree", label: "Pine Tree", x: 50.5, y: 25.0 },
+  { id: "d-7", kind: "bench", label: "Park Bench", x: 15.2, y: 12.6 },
+  { id: "d-8", kind: "lamp", label: "Street Lamp", x: 15.2, y: 23.2 },
+  { id: "d-9", kind: "planter", label: "Flower Planter", x: 30.2, y: 12.6 },
+  { id: "d-10", kind: "fountain", label: "Plaza Fountain", x: 23.0, y: 23.2 },
+  { id: "d-11", kind: "umbrella", label: "Creator Umbrella", x: 37.0, y: 16.0 },
 ];
 
 function formatUsdCompact(value: number): string {
@@ -71,6 +86,15 @@ export function App() {
     outfitColor: "#0052FF",
     skinTone: "#E5B893",
     visor: true,
+  });
+
+  const [theme, setTheme] = useState<CityThemeConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_THEME_KEY);
+      return saved ? { ...DEFAULT_THEME, ...(JSON.parse(saved) as Partial<CityThemeConfig>) } : DEFAULT_THEME;
+    } catch {
+      return DEFAULT_THEME;
+    }
   });
 
   const [sectors, setSectors] = useState<CitySector[]>(() => {
@@ -139,9 +163,17 @@ export function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_THEME_KEY, JSON.stringify(theme));
+    } catch {
+      // ignore storage errors
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_SECTORS_KEY, JSON.stringify(sectors));
     } catch {
-      // ignore storage quota errors
+      // ignore storage errors
     }
   }, [sectors]);
 
@@ -149,7 +181,7 @@ export function App() {
     try {
       localStorage.setItem(STORAGE_MEMBERS_KEY, JSON.stringify(members));
     } catch {
-      // ignore storage quota errors
+      // ignore storage errors
     }
   }, [members]);
 
@@ -157,14 +189,14 @@ export function App() {
     try {
       localStorage.setItem(STORAGE_DECOR_KEY, JSON.stringify(decorItems));
     } catch {
-      // ignore storage quota errors
+      // ignore storage errors
     }
   }, [decorItems]);
 
   const [panelOpen, setPanelOpen] = useState(true);
-  const [leftPanel, setLeftPanel] = useState<"avatar" | "add">("avatar");
+  const [leftPanel, setLeftPanel] = useState<"avatar" | "add" | "customize">("avatar");
   const [placingDecorKind, setPlacingDecorKind] = useState<DecorKind | null>(null);
-  const [groundSize, setGroundSize] = useState<CityGroundSize>("standard");
+  const [groundSize, setGroundSize] = useState<CityGroundSize>("mega");
   const [selectedSector, setSelectedSector] = useState<CitySector | null>(null);
   const [selectedMember, setSelectedMember] = useState<CityMember | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -182,6 +214,44 @@ export function App() {
         y: gy,
       },
     ]);
+  };
+
+  const handleUpdateSector = (id: string, patch: Partial<CitySector>) => {
+    setSectors((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  };
+
+  const handleDeleteSector = (id: string) => {
+    setSectors((prev) => prev.filter((s) => s.id !== id));
+    if (selectedSector?.id === id) setSelectedSector(null);
+  };
+
+  const handleUpdateMember = (id: string, patch: Partial<CityMember>) => {
+    setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  };
+
+  const handleDeleteMember = (id: string) => {
+    setMembers((prev) => prev.filter((m) => m.id !== id));
+    if (selectedMember?.id === id) setSelectedMember(null);
+  };
+
+  const handleUpdateDecor = (id: string, patch: Partial<CityDecorItem>) => {
+    setDecorItems((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  };
+
+  const handleDeleteDecor = (id: string) => {
+    setDecorItems((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const handleResetAllCityData = () => {
+    setSectors(INITIAL_SECTORS);
+    setMembers(INITIAL_MEMBERS);
+    setDecorItems(INITIAL_DECOR);
+    setTheme(DEFAULT_THEME);
+    setPlacingDecorKind(null);
+    localStorage.removeItem(STORAGE_SECTORS_KEY);
+    localStorage.removeItem(STORAGE_MEMBERS_KEY);
+    localStorage.removeItem(STORAGE_DECOR_KEY);
+    localStorage.removeItem(STORAGE_THEME_KEY);
   };
 
   const connectBaseWallet = async () => {
@@ -257,7 +327,7 @@ export function App() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#cbd5e1" }}>
-            <span>Ground:</span>
+            <span>City Size:</span>
             <select
               value={groundSize}
               onChange={(e) => setGroundSize(e.target.value as CityGroundSize)}
@@ -271,9 +341,9 @@ export function App() {
                 cursor: "pointer",
               }}
             >
-              <option value="compact">Compact (30×20)</option>
-              <option value="standard">Standard (38×24)</option>
-              <option value="mega">Mega City (48×30)</option>
+              <option value="compact">District (38×24)</option>
+              <option value="standard">City (50×32)</option>
+              <option value="mega">Mega Metropolis (64×40)</option>
             </select>
           </label>
 
@@ -335,7 +405,7 @@ export function App() {
               overflowY: "auto",
             }}
           >
-            <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button
                 type="button"
                 onClick={() => {
@@ -343,12 +413,12 @@ export function App() {
                   setPlacingDecorKind(null);
                 }}
                 style={{
-                  padding: "6px 10px",
+                  padding: "6px 9px",
                   borderRadius: 8,
                   border: "none",
                   cursor: "pointer",
                   fontWeight: 600,
-                  fontSize: 12,
+                  fontSize: 11,
                   background: leftPanel === "avatar" ? "#2563eb" : "#1e293b",
                   color: "#fff",
                 }}
@@ -359,17 +429,36 @@ export function App() {
                 type="button"
                 onClick={() => setLeftPanel("add")}
                 style={{
-                  padding: "6px 10px",
+                  padding: "6px 9px",
                   borderRadius: 8,
                   border: "none",
                   cursor: "pointer",
                   fontWeight: 600,
-                  fontSize: 12,
+                  fontSize: 11,
                   background: leftPanel === "add" ? "#2563eb" : "#1e293b",
                   color: "#fff",
                 }}
               >
-                Add dApp / Citizen / Decor
+                + Add Items
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLeftPanel("customize");
+                  setPlacingDecorKind(null);
+                }}
+                style={{
+                  padding: "6px 9px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: 11,
+                  background: leftPanel === "customize" ? "#10b981" : "#1e293b",
+                  color: leftPanel === "customize" ? "#052e16" : "#fff",
+                }}
+              >
+                Customize All
               </button>
               <button
                 type="button"
@@ -379,12 +468,12 @@ export function App() {
                   setPlacingDecorKind(null);
                 }}
                 style={{
-                  padding: "6px 9px",
+                  padding: "6px 8px",
                   borderRadius: 8,
                   border: "1px solid #334155",
                   cursor: "pointer",
                   fontWeight: 700,
-                  fontSize: 12,
+                  fontSize: 11,
                   background: "#0f172a",
                   color: "#cbd5e1",
                 }}
@@ -393,9 +482,11 @@ export function App() {
               </button>
             </div>
 
-            {leftPanel === "avatar" ? (
+            {leftPanel === "avatar" && (
               <AvatarCustomizer avatar={avatar} onChange={setAvatar} />
-            ) : (
+            )}
+
+            {leftPanel === "add" && (
               <CityManagerTool
                 sectors={sectors}
                 members={members}
@@ -411,12 +502,30 @@ export function App() {
                 }}
               />
             )}
+
+            {leftPanel === "customize" && (
+              <CityCustomizerDrawer
+                theme={theme}
+                onChangeTheme={setTheme}
+                sectors={sectors}
+                onUpdateSector={handleUpdateSector}
+                onDeleteSector={handleDeleteSector}
+                members={members}
+                onUpdateMember={handleUpdateMember}
+                onDeleteMember={handleDeleteMember}
+                decorItems={decorItems}
+                onUpdateDecor={handleUpdateDecor}
+                onDeleteDecor={handleDeleteDecor}
+                onResetAllCityData={handleResetAllCityData}
+              />
+            )}
           </div>
         )}
 
         <div style={{ flex: 1, height: "100%" }}>
           <BaseCityCanvas
             avatar={avatar}
+            theme={theme}
             sectors={sectors}
             members={members}
             decorItems={decorItems}
@@ -424,6 +533,8 @@ export function App() {
             onPlaceDecorAt={handlePlaceDecorAt}
             groundSize={groundSize}
             marketSnapshot={marketSnapshot}
+            isSyncingMarket={isSyncingMarket}
+            onRefreshMarket={syncDefiLlamaData}
             selectedSector={selectedSector}
             selectedMember={selectedMember}
             onSelectSector={setSelectedSector}
@@ -437,11 +548,11 @@ export function App() {
             style={{
               position: "absolute",
               top: 12,
-              right: 12,
+              right: 248,
               zIndex: 11,
               width: 280,
-              background: "rgba(15, 23, 42, 0.95)",
-              border: "1px solid rgba(56, 189, 248, 0.35)",
+              background: "rgba(15, 23, 42, 0.96)",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
               borderRadius: 14,
               padding: 16,
               color: "#f8fafc",
@@ -494,7 +605,7 @@ export function App() {
             style={{
               position: "absolute",
               top: 12,
-              right: 12,
+              right: 248,
               zIndex: 10,
               width: 280,
               background: "rgba(15, 23, 42, 0.94)",
@@ -547,7 +658,7 @@ export function App() {
             style={{
               position: "absolute",
               top: 12,
-              right: 12,
+              right: 248,
               zIndex: 10,
               width: 280,
               background: "rgba(15, 23, 42, 0.94)",
