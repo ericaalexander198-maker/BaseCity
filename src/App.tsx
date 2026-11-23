@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { AvatarConfig, AvatarCustomizer } from "./components/AvatarCustomizer";
-import { BaseCityCanvas } from "./components/BaseCityCanvas";
+import { BaseCityCanvas, CityGroundSize } from "./components/BaseCityCanvas";
 import { CityManagerTool } from "./components/CityManagerTool";
 import {
   CityMember,
@@ -66,7 +66,9 @@ export function App() {
     }
   }, [members]);
 
+  const [panelOpen, setPanelOpen] = useState(true);
   const [leftPanel, setLeftPanel] = useState<"avatar" | "add">("avatar");
+  const [groundSize, setGroundSize] = useState<CityGroundSize>("standard");
   const [selectedSector, setSelectedSector] = useState<CitySector | null>(null);
   const [selectedMember, setSelectedMember] = useState<CityMember | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -111,6 +113,7 @@ export function App() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 12,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -130,6 +133,27 @@ export function App() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#cbd5e1" }}>
+            <span>Ground:</span>
+            <select
+              value={groundSize}
+              onChange={(e) => setGroundSize(e.target.value as CityGroundSize)}
+              style={{
+                padding: "5px 8px",
+                borderRadius: 7,
+                border: "1px solid #334155",
+                background: "#1e293b",
+                color: "#f8fafc",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              <option value="compact">Compact (26×20)</option>
+              <option value="standard">Standard (32×24)</option>
+              <option value="mega">Mega City (42×32)</option>
+            </select>
+          </label>
+
           {walletStatus && (
             <span style={{ fontSize: 12, color: "#93c5fd" }}>{walletStatus}</span>
           )}
@@ -155,68 +179,110 @@ export function App() {
       </header>
 
       <main style={{ flex: 1, display: "flex", position: "relative", overflow: "hidden" }}>
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            zIndex: 10,
-            maxHeight: "calc(100vh - 76px)",
-            overflowY: "auto",
-          }}
-        >
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <button
-              type="button"
-              onClick={() => setLeftPanel("avatar")}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 8,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontSize: 12,
-                background: leftPanel === "avatar" ? "#2563eb" : "#1e293b",
-                color: "#fff",
-              }}
-            >
-              My Shape
-            </button>
-            <button
-              type="button"
-              onClick={() => setLeftPanel("add")}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 8,
-                border: "none",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontSize: 12,
-                background: leftPanel === "add" ? "#2563eb" : "#1e293b",
-                color: "#fff",
-              }}
-            >
-              Add dApp / Citizen
-            </button>
-          </div>
+        {!panelOpen ? (
+          <button
+            type="button"
+            onClick={() => setPanelOpen(true)}
+            style={{
+              position: "absolute",
+              top: 12,
+              left: 12,
+              zIndex: 10,
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(148, 163, 184, 0.35)",
+              background: "rgba(15, 23, 42, 0.92)",
+              color: "#f8fafc",
+              fontWeight: 600,
+              fontSize: 12,
+              cursor: "pointer",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.35)",
+            }}
+          >
+            ☰ Show Shape & Tools
+          </button>
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              top: 12,
+              left: 12,
+              zIndex: 10,
+              maxHeight: "calc(100vh - 76px)",
+              overflowY: "auto",
+            }}
+          >
+            <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => setLeftPanel("avatar")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  background: leftPanel === "avatar" ? "#2563eb" : "#1e293b",
+                  color: "#fff",
+                }}
+              >
+                My Shape
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeftPanel("add")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  background: leftPanel === "add" ? "#2563eb" : "#1e293b",
+                  color: "#fff",
+                }}
+              >
+                Add dApp / Citizen
+              </button>
+              <button
+                type="button"
+                title="Hide panel for full view"
+                onClick={() => setPanelOpen(false)}
+                style={{
+                  padding: "6px 9px",
+                  borderRadius: 8,
+                  border: "1px solid #334155",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  background: "#0f172a",
+                  color: "#cbd5e1",
+                }}
+              >
+                Hide ✕
+              </button>
+            </div>
 
-          {leftPanel === "avatar" ? (
-            <AvatarCustomizer avatar={avatar} onChange={setAvatar} />
-          ) : (
-            <CityManagerTool
-              sectors={sectors}
-              members={members}
-              onAddSector={(sec) => setSectors((prev) => [...prev, sec])}
-              onAddMember={(mem) => setMembers((prev) => [...prev, mem])}
-            />
-          )}
-        </div>
+            {leftPanel === "avatar" ? (
+              <AvatarCustomizer avatar={avatar} onChange={setAvatar} />
+            ) : (
+              <CityManagerTool
+                sectors={sectors}
+                members={members}
+                onAddSector={(sec) => setSectors((prev) => [...prev, sec])}
+                onAddMember={(mem) => setMembers((prev) => [...prev, mem])}
+              />
+            )}
+          </div>
+        )}
 
         <div style={{ flex: 1, height: "100%" }}>
           <BaseCityCanvas
             avatar={avatar}
             sectors={sectors}
             members={members}
+            groundSize={groundSize}
             selectedSector={selectedSector}
             selectedMember={selectedMember}
             onSelectSector={setSelectedSector}
