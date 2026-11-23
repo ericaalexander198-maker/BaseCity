@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { AvatarConfig, AvatarCustomizer } from "./components/AvatarCustomizer";
 import { BaseCityCanvas, CityGroundSize } from "./components/BaseCityCanvas";
-import { CityManagerTool } from "./components/CityManagerTool";
+import {
+  CityDecorItem,
+  CityManagerTool,
+  DecorKind,
+} from "./components/CityManagerTool";
 import {
   CityMember,
   CitySector,
@@ -20,6 +24,21 @@ declare global {
 const BASE_CHAIN_ID_HEX = "0x2105"; // 8453 (Base Mainnet)
 const STORAGE_SECTORS_KEY = "base_city_sectors_v1";
 const STORAGE_MEMBERS_KEY = "base_city_members_v1";
+const STORAGE_DECOR_KEY = "base_city_decor_v1";
+
+const INITIAL_DECOR: CityDecorItem[] = [
+  { id: "d-1", kind: "pine_tree", label: "Pine Tree", x: 31.5, y: 2.2 },
+  { id: "d-2", kind: "pine_tree", label: "Pine Tree", x: 34.5, y: 1.8 },
+  { id: "d-3", kind: "palm_tree", label: "Palm Tree", x: 32.5, y: 6.5 },
+  { id: "d-4", kind: "pine_tree", label: "Pine Tree", x: 35.2, y: 8.8 },
+  { id: "d-5", kind: "palm_tree", label: "Palm Tree", x: 31.8, y: 14.5 },
+  { id: "d-6", kind: "pine_tree", label: "Pine Tree", x: 35.0, y: 17.5 },
+  { id: "d-7", kind: "bench", label: "Park Bench", x: 10.8, y: 9.2 },
+  { id: "d-8", kind: "lamp", label: "Street Lamp", x: 11.2, y: 17.2 },
+  { id: "d-9", kind: "planter", label: "Flower Planter", x: 21.6, y: 9.2 },
+  { id: "d-10", kind: "fountain", label: "Plaza Fountain", x: 16.5, y: 17.2 },
+  { id: "d-11", kind: "umbrella", label: "Creator Umbrella", x: 26.2, y: 12.5 },
+];
 
 export function App() {
   const [avatar, setAvatar] = useState<AvatarConfig>({
@@ -50,6 +69,15 @@ export function App() {
     }
   });
 
+  const [decorItems, setDecorItems] = useState<CityDecorItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_DECOR_KEY);
+      return saved ? (JSON.parse(saved) as CityDecorItem[]) : INITIAL_DECOR;
+    } catch {
+      return INITIAL_DECOR;
+    }
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_SECTORS_KEY, JSON.stringify(sectors));
@@ -66,13 +94,36 @@ export function App() {
     }
   }, [members]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_DECOR_KEY, JSON.stringify(decorItems));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [decorItems]);
+
   const [panelOpen, setPanelOpen] = useState(true);
   const [leftPanel, setLeftPanel] = useState<"avatar" | "add">("avatar");
+  const [placingDecorKind, setPlacingDecorKind] = useState<DecorKind | null>(null);
   const [groundSize, setGroundSize] = useState<CityGroundSize>("standard");
   const [selectedSector, setSelectedSector] = useState<CitySector | null>(null);
   const [selectedMember, setSelectedMember] = useState<CityMember | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletStatus, setWalletStatus] = useState<string>("");
+
+  const handlePlaceDecorAt = (gx: number, gy: number) => {
+    if (!placingDecorKind) return;
+    setDecorItems((prev) => [
+      ...prev,
+      {
+        id: `decor-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: placingDecorKind,
+        label: placingDecorKind.replace("_", " "),
+        x: gx,
+        y: gy,
+      },
+    ]);
+  };
 
   const connectBaseWallet = async () => {
     if (!window.ethereum) {
@@ -128,7 +179,7 @@ export function App() {
           />
           <strong style={{ fontSize: 16 }}>BASE CITY</strong>
           <span style={{ fontSize: 12, color: "#94a3b8" }}>
-            {sectors.length} dApps/Spots • {members.length} Citizens
+            {sectors.length} dApps/Spots • {members.length} Citizens • {decorItems.length} Props
           </span>
         </div>
 
@@ -148,9 +199,9 @@ export function App() {
                 cursor: "pointer",
               }}
             >
-              <option value="compact">Compact (26×20)</option>
-              <option value="standard">Standard (32×24)</option>
-              <option value="mega">Mega City (42×32)</option>
+              <option value="compact">Compact (30×20)</option>
+              <option value="standard">Standard (38×24)</option>
+              <option value="mega">Mega City (48×30)</option>
             </select>
           </label>
 
@@ -215,7 +266,10 @@ export function App() {
             <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
               <button
                 type="button"
-                onClick={() => setLeftPanel("avatar")}
+                onClick={() => {
+                  setLeftPanel("avatar");
+                  setPlacingDecorKind(null);
+                }}
                 style={{
                   padding: "6px 10px",
                   borderRadius: 8,
@@ -243,12 +297,15 @@ export function App() {
                   color: "#fff",
                 }}
               >
-                Add dApp / Citizen
+                Add dApp / Citizen / Decor
               </button>
               <button
                 type="button"
                 title="Hide panel for full view"
-                onClick={() => setPanelOpen(false)}
+                onClick={() => {
+                  setPanelOpen(false);
+                  setPlacingDecorKind(null);
+                }}
                 style={{
                   padding: "6px 9px",
                   borderRadius: 8,
@@ -270,8 +327,16 @@ export function App() {
               <CityManagerTool
                 sectors={sectors}
                 members={members}
+                decorItems={decorItems}
+                placingDecorKind={placingDecorKind}
+                onSelectPlacingDecorKind={setPlacingDecorKind}
                 onAddSector={(sec) => setSectors((prev) => [...prev, sec])}
                 onAddMember={(mem) => setMembers((prev) => [...prev, mem])}
+                onAddDecor={(item) => setDecorItems((prev) => [...prev, item])}
+                onClearCustomDecor={() => {
+                  setPlacingDecorKind(null);
+                  setDecorItems(INITIAL_DECOR);
+                }}
               />
             )}
           </div>
@@ -282,6 +347,9 @@ export function App() {
             avatar={avatar}
             sectors={sectors}
             members={members}
+            decorItems={decorItems}
+            placingDecorKind={placingDecorKind}
+            onPlaceDecorAt={handlePlaceDecorAt}
             groundSize={groundSize}
             selectedSector={selectedSector}
             selectedMember={selectedMember}
