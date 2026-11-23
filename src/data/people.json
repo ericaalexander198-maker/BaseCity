@@ -1,0 +1,40 @@
+{
+  "team": [
+    {
+      "id": "jesse",
+      "name": "Jesse Pollak",
+      "role": "Creator of Base",
+      "bio": "Building an onchain economy that increases global freedom.",
+      "xUrl": "https://x.com/jessepollak",
+      "farcasterUrl": "https://warpcast.com/jessepollak"
+    },
+    {
+      "id": "base-core",
+      "name": "Base Core Team",
+      "role": "Protocol & Ecosystem",
+      "bio": "Scaling low-cost, fast, and secure onchain apps on Base.",
+      "xUrl": "https://x.com/base",
+      "farcasterUrl": "https://warpcast.com/base"
+    }
+  ],
+  "creators": [
+    {
+      "id": "creator-1",
+      "name": "Onchain Visuals",
+      "role": "Motion & Brand Creator",
+      "basenames": "visuals.base.eth",
+      "bio": "Visual explainers, animations, and community art across Base.",
+      "xUrl": "https://x.com/base",
+      "farcasterUrl": "https://warpcast.com/base"
+    },
+    {
+      "id": "creator-2",
+      "name": "Base Builders Guild",
+      "role": "Educator & Shipper",
+      "basenames": "builders.base.eth",
+      "bio": "Weekly shipping notes, tutorials, and ecosystem highlights.",
+      "xUrl": "https://x.com/base",
+      "farcasterUrl": "https://warpcast.com/base"
+    }
+  ]
+}
