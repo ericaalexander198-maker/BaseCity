@@ -168,7 +168,12 @@ function getDoorRange(room: RoomBox) {
   };
 }
 
-function isInsideDoorOpening(gx: number, gy: number, room: RoomBox, pad = 0.25): boolean {
+function isInsideDoorOpening(
+  gx: number,
+  gy: number,
+  room: RoomBox,
+  pad = 0.25
+): boolean {
   const door = getDoorRange(room);
   if (room.doorSide === "south") {
     return (
@@ -198,7 +203,12 @@ function isInsideDoorOpening(gx: number, gy: number, room: RoomBox, pad = 0.25):
   );
 }
 
-function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.26): boolean {
+function hitsRoomWall(
+  gx: number,
+  gy: number,
+  room: RoomBox,
+  radius = 0.26
+): boolean {
   if (isInsideDoorOpening(gx, gy, room)) return false;
 
   const xMin = room.gx;
@@ -206,8 +216,10 @@ function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.26): boo
   const yMin = room.gy;
   const yMax = room.gy + room.gh;
 
-  const withinXBand = gx >= xMin - WALL_THICK - radius && gx <= xMax + WALL_THICK + radius;
-  const withinYBand = gy >= yMin - WALL_THICK - radius && gy <= yMax + WALL_THICK + radius;
+  const withinXBand =
+    gx >= xMin - WALL_THICK - radius && gx <= xMax + WALL_THICK + radius;
+  const withinYBand =
+    gy >= yMin - WALL_THICK - radius && gy <= yMax + WALL_THICK + radius;
 
   const onNorthWall = withinXBand && Math.abs(gy - yMin) < WALL_THICK + radius;
   const onSouthWall = withinXBand && Math.abs(gy - yMax) < WALL_THICK + radius;
@@ -247,8 +259,18 @@ function resolveCollision(
     const maxY = s.y + s.height + STORE_MARGIN;
 
     if (outX > minX && outX < maxX && outY > minY && outY < maxY) {
-      const canMoveX = !(prevX > minX && prevX < maxX && outY > minY && outY < maxY);
-      const canMoveY = !(outX > minX && outX < maxX && prevY > minY && prevY < maxY);
+      const canMoveX = !(
+        prevX > minX &&
+        prevX < maxX &&
+        outY > minY &&
+        outY < maxY
+      );
+      const canMoveY = !(
+        outX > minX &&
+        outX < maxX &&
+        prevY > minY &&
+        prevY < maxY
+      );
 
       if (canMoveX && !canMoveY) {
         outY = prevY;
@@ -310,7 +332,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   const playerPos = useRef({ gx: 15.5, gy: 12.5 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const camOffset = useRef({ x: 0, y: 0 });
-  const zoomRef = useRef(0.85);
+  const zoomRef = useRef<number | null>(null);
   const [zoomDisplay, setZoomDisplay] = useState(85);
   const [billboardOpen, setBillboardOpen] = useState(true);
   const keysPressed = useRef<Record<string, boolean>>({});
@@ -318,8 +340,27 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   const logoCache = useRef<Record<string, HTMLImageElement>>({});
   const [nearbySector, setNearbySector] = useState<CitySector | null>(null);
 
+  const getActiveZoom = (cssW: number) => {
+    if (zoomRef.current !== null) return zoomRef.current;
+    const mapPixelWidth = gridCols * TILE_SIZE;
+    const ideal = Math.max(
+      MIN_ZOOM,
+      Math.min(1.15, (cssW * 0.72) / mapPixelWidth)
+    );
+    const rounded = Number(ideal.toFixed(2));
+    zoomRef.current = rounded;
+    return rounded;
+  };
+
+  useEffect(() => {
+    zoomRef.current = null;
+  }, [groundSize]);
+
   const setZoom = (next: number) => {
-    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(next.toFixed(2))));
+    const clamped = Math.max(
+      MIN_ZOOM,
+      Math.min(MAX_ZOOM, Number(next.toFixed(2)))
+    );
     zoomRef.current = clamped;
     setZoomDisplay(Math.round(clamped * 100));
   };
@@ -353,7 +394,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    setZoom(zoomRef.current + (e.deltaY < 0 ? 0.12 : -0.12));
+    const currentZ = getActiveZoom(canvasRef.current?.clientWidth || 900);
+    setZoom(currentZ + (e.deltaY < 0 ? 0.12 : -0.12));
   };
 
   const getMapOrigin = (cssW: number, cssH: number) => {
@@ -365,8 +407,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     };
   };
 
-  const screenToWorld = (sx: number, sy: number, cssW: number, cssH: number) => {
-    const z = zoomRef.current;
+  const screenToWorld = (
+    sx: number,
+    sy: number,
+    cssW: number,
+    cssH: number
+  ) => {
+    const z = getActiveZoom(cssW);
     const cx = cssW / 2;
     const cy = cssH / 2;
     return {
@@ -513,12 +560,26 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ? originX + door.end * TILE_SIZE
         : originY + door.end * TILE_SIZE;
 
-    drawWallSegment3D(ctx, rx - wt, ry - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, false);
+    drawWallSegment3D(
+      ctx,
+      rx - wt,
+      ry - wt,
+      rw + wt * 2,
+      wt,
+      room.wallTop,
+      room.wallSide,
+      false
+    );
 
     if (room.doorSide === "south") {
       if (theme.showRoomDoors) {
         ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-        ctx.fillRect(dStartGridPx, ry + rh - wt, dEndGridPx - dStartGridPx, wt);
+        ctx.fillRect(
+          dStartGridPx,
+          ry + rh - wt,
+          dEndGridPx - dStartGridPx,
+          wt
+        );
       }
       drawWallSegment3D(
         ctx,
@@ -541,13 +602,27 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         true
       );
     } else {
-      drawWallSegment3D(ctx, rx - wt, ry + rh - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, true);
+      drawWallSegment3D(
+        ctx,
+        rx - wt,
+        ry + rh - wt,
+        rw + wt * 2,
+        wt,
+        room.wallTop,
+        room.wallSide,
+        true
+      );
     }
 
     if (room.doorSide === "west") {
       if (theme.showRoomDoors) {
         ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-        ctx.fillRect(rx - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+        ctx.fillRect(
+          rx - wt,
+          dStartGridPx,
+          wt,
+          dEndGridPx - dStartGridPx
+        );
       }
       drawWallSegment3D(
         ctx,
@@ -570,13 +645,27 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         true
       );
     } else {
-      drawWallSegment3D(ctx, rx - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
+      drawWallSegment3D(
+        ctx,
+        rx - wt,
+        ry - wt,
+        wt,
+        rh + wt * 2,
+        room.wallTop,
+        room.wallSide,
+        true
+      );
     }
 
     if (room.doorSide === "east") {
       if (theme.showRoomDoors) {
         ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-        ctx.fillRect(rx + rw - wt, dStartGridPx, wt, dEndGridPx - dStartGridPx);
+        ctx.fillRect(
+          rx + rw - wt,
+          dStartGridPx,
+          wt,
+          dEndGridPx - dStartGridPx
+        );
       }
       drawWallSegment3D(
         ctx,
@@ -599,7 +688,16 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         true
       );
     } else {
-      drawWallSegment3D(ctx, rx + rw - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
+      drawWallSegment3D(
+        ctx,
+        rx + rw - wt,
+        ry - wt,
+        wt,
+        rh + wt * 2,
+        room.wallTop,
+        room.wallSide,
+        true
+      );
     }
   };
 
@@ -829,11 +927,20 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         walkPhase.current += 0.03;
       }
 
-      const { originX: baseOriginX, originY: baseOriginY } = getMapOrigin(cssW, cssH);
+      const { originX: baseOriginX, originY: baseOriginY } = getMapOrigin(
+        cssW,
+        cssH
+      );
       const pWorldX = baseOriginX + playerPos.current.gx * TILE_SIZE;
       const pWorldY = baseOriginY + playerPos.current.gy * TILE_SIZE;
-      const desiredCamX = Math.max(-360, Math.min(360, (cssW / 2 - pWorldX) * 0.55));
-      const desiredCamY = Math.max(-240, Math.min(240, (cssH / 2 - pWorldY) * 0.55));
+      const desiredCamX = Math.max(
+        -360,
+        Math.min(360, (cssW / 2 - pWorldX) * 0.55)
+      );
+      const desiredCamY = Math.max(
+        -240,
+        Math.min(240, (cssH / 2 - pWorldY) * 0.55)
+      );
       camOffset.current.x += (desiredCamX - camOffset.current.x) * 0.08;
       camOffset.current.y += (desiredCamY - camOffset.current.y) * 0.08;
 
@@ -841,7 +948,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         sectors.find((s) => {
           const cx = s.x + s.width / 2;
           const cy = s.y + s.height / 2;
-          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 3.6;
+          return (
+            Math.hypot(
+              playerPos.current.gx - cx,
+              playerPos.current.gy - cy
+            ) < 3.6
+          );
         }) || null;
 
       setNearbySector((prev) => (prev?.id === foundNear?.id ? prev : foundNear));
@@ -850,7 +962,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.fillStyle = theme.grassSecondary;
       ctx.fillRect(0, 0, cssW, cssH);
 
-      const z = zoomRef.current;
+      const z = getActiveZoom(cssW);
       ctx.translate(cssW / 2, cssH / 2);
       ctx.scale(z, z);
       ctx.translate(-cssW / 2, -cssH / 2);
@@ -863,13 +975,18 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         for (let c = 0; c < gridCols; c++) {
           const x = originX + c * TILE_SIZE;
           const y = originY + r * TILE_SIZE;
-          const inCampus = r >= 1 && r < campusRows && c >= 1 && c < campusCols;
+          const inCampus =
+            r >= 1 && r < campusRows && c >= 1 && c < campusCols;
 
           if (!inCampus) {
-            ctx.fillStyle = (r + c) % 2 === 0 ? theme.grassPrimary : theme.grassSecondary;
+            ctx.fillStyle =
+              (r + c) % 2 === 0 ? theme.grassPrimary : theme.grassSecondary;
             ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
           } else {
-            ctx.fillStyle = (r + c) % 2 === 0 ? theme.streetPrimary : theme.streetSecondary;
+            ctx.fillStyle =
+              (r + c) % 2 === 0
+                ? theme.streetPrimary
+                : theme.streetSecondary;
             ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
             if (theme.showGrid) {
               ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
@@ -1011,9 +1128,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         const torsoW = 12 * w;
         const torsoH = 14 * h;
         const isSelected = selectedMember?.id === m.id;
-        const wave = Math.sin(walkPhase.current * 1.4 + index) * (isSelected ? 4 : 0);
+        const wave =
+          Math.sin(walkPhase.current * 1.4 + index) * (isSelected ? 4 : 0);
 
-        ctx.fillStyle = isSelected ? "rgba(250,204,21,0.45)" : "rgba(15,23,42,0.25)";
+        ctx.fillStyle = isSelected
+          ? "rgba(250,204,21,0.45)"
+          : "rgba(15,23,42,0.25)";
         ctx.beginPath();
         ctx.ellipse(px, py + 7, 9 * w, 4, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -1171,7 +1291,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
             cursor: "pointer",
           }}
         >
-          📊 DefiLlama Board ({marketSnapshot.tvl})
+          📊 TVL ({marketSnapshot.tvl})
         </button>
       ) : (
         <div
@@ -1180,7 +1300,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
             top: 12,
             right: 12,
             zIndex: 9,
-            width: 224,
+            width: "min(224px, calc(100vw - 24px))",
+            maxHeight: "calc(100% - 96px)",
+            overflowY: "auto",
             background: "rgba(15, 23, 42, 0.94)",
             border: "1px solid rgba(56, 189, 248, 0.4)",
             borderRadius: 12,
@@ -1200,7 +1322,14 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
               marginBottom: 8,
             }}
           >
-            <span style={{ fontSize: 10, fontWeight: 800, color: "#38bdf8", letterSpacing: 0.4 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                color: "#38bdf8",
+                letterSpacing: 0.4,
+              }}
+            >
               DEFILLAMA • BASE BOARD
             </span>
             <button
@@ -1220,12 +1349,28 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
             </button>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: 4,
+            }}
+          >
             <span style={{ color: "#94a3b8", fontSize: 11 }}>Chain TVL</span>
-            <strong style={{ fontSize: 16, color: "#ffffff" }}>{marketSnapshot.tvl}</strong>
+            <strong style={{ fontSize: 16, color: "#ffffff" }}>
+              {marketSnapshot.tvl}
+            </strong>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 11,
+              marginBottom: 8,
+            }}
+          >
             <span style={{ color: "#94a3b8" }}>Market Status</span>
             <span
               style={{
@@ -1263,12 +1408,22 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
               <strong>{marketSnapshot.dexVol24h}</strong>
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ color: "#94a3b8", fontSize: 10 }}>24h Active Addresses</div>
+              <div style={{ color: "#94a3b8", fontSize: 10 }}>
+                24h Active Addresses
+              </div>
               <strong>{marketSnapshot.activeAddresses24h}</strong>
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "#94a3b8" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              fontSize: 10,
+              color: "#94a3b8",
+            }}
+          >
             <span>{marketSnapshot.updatedLabel}</span>
             {onRefreshMarket && (
               <button
@@ -1310,7 +1465,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       >
         <button
           type="button"
-          onClick={() => setZoom(zoomRef.current - 0.2)}
+          onClick={() =>
+            setZoom(getActiveZoom(canvasRef.current?.clientWidth || 900) - 0.2)
+          }
           style={{
             width: 24,
             height: 24,
@@ -1329,7 +1486,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         </span>
         <button
           type="button"
-          onClick={() => setZoom(zoomRef.current + 0.2)}
+          onClick={() =>
+            setZoom(getActiveZoom(canvasRef.current?.clientWidth || 900) + 0.2)
+          }
           style={{
             width: 24,
             height: 24,
@@ -1375,11 +1534,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       >
         {placingDecorKind ? (
           <span style={{ color: "#facc15", fontWeight: 700 }}>
-            Click anywhere on the map to place {placingDecorKind.replace("_", " ")}
+            Click anywhere on the map to place{" "}
+            {placingDecorKind.replace("_", " ")}
           </span>
         ) : (
           <span>
-            {gridCols}×{gridRows} Metropolis • Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
+            {gridCols}×{gridRows} Metropolis • Base TVL:{" "}
+            <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
           </span>
         )}
         {nearbySector && (
