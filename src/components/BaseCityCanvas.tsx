@@ -16,55 +16,28 @@ interface BaseCityCanvasProps {
 }
 
 const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
-  compact: { cols: 26, rows: 20 },
-  standard: { cols: 32, rows: 24 },
-  mega: { cols: 42, rows: 32 },
+  compact: { cols: 30, rows: 20 },
+  standard: { cols: 38, rows: 24 },
+  mega: { cols: 48, rows: 30 },
 };
 
-const TILE_W = 48;
-const TILE_H = 24;
+const TILE_SIZE = 32;
 const STORE_MARGIN = 0.45;
-const MIN_ZOOM = 0.55;
+const MIN_ZOOM = 0.65;
 const MAX_ZOOM = 2.8;
 
-const PALM_SPOTS = [
-  { x: 4.2, y: 1.5 },
-  { x: 11.5, y: 1.4 },
-  { x: 21.5, y: 1.5 },
-  { x: 28.5, y: 2.2 },
-  { x: 35.5, y: 2.0 },
-  { x: 2.2, y: 11.5 },
-  { x: 14.0, y: 11.2 },
-  { x: 24.5, y: 11.5 },
-  { x: 34.0, y: 12.0 },
-  { x: 3.5, y: 17.5 },
-  { x: 16.5, y: 17.8 },
-  { x: 27.5, y: 17.5 },
-  { x: 37.0, y: 22.0 },
+const PINE_TREES = [
+  { gx: 31.5, gy: 2.2 },
+  { gx: 34.5, gy: 1.8 },
+  { gx: 32.5, gy: 6.5 },
+  { gx: 35.2, gy: 8.8 },
+  { gx: 31.8, gy: 14.5 },
+  { gx: 35.0, gy: 17.5 },
+  { gx: 33.2, gy: 21.0 },
+  { gx: 41.0, gy: 4.5 },
+  { gx: 43.5, gy: 12.0 },
+  { gx: 42.0, gy: 22.0 },
 ];
-
-const LAMP_SPOTS = [
-  { x: 6.5, y: 13.2 },
-  { x: 13.5, y: 13.2 },
-  { x: 20.5, y: 13.2 },
-  { x: 26.5, y: 13.2 },
-  { x: 33.5, y: 13.2 },
-];
-
-function gridToIso(gx: number, gy: number, originX: number, originY: number) {
-  return {
-    x: originX + (gx - gy) * (TILE_W / 2),
-    y: originY + (gx + gy) * (TILE_H / 2),
-  };
-}
-
-function isoToGrid(sx: number, sy: number, originX: number, originY: number) {
-  const dx = sx - originX;
-  const dy = sy - originY;
-  const gx = (dx / (TILE_W / 2) + dy / (TILE_H / 2)) / 2;
-  const gy = (dy / (TILE_H / 2) - dx / (TILE_W / 2)) / 2;
-  return { gx, gy };
-}
 
 function shadeHex(hex: string, percent: number): string {
   const clean = hex.replace("#", "");
@@ -77,7 +50,7 @@ function shadeHex(hex: string, percent: number): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
-function resolveStoreCollision(
+function resolveCollision(
   gx: number,
   gy: number,
   prevX: number,
@@ -86,8 +59,8 @@ function resolveStoreCollision(
   cols: number,
   rows: number
 ) {
-  let outX = Math.max(0.6, Math.min(cols - 1.2, gx));
-  let outY = Math.max(0.6, Math.min(rows - 1.2, gy));
+  let outX = Math.max(0.8, Math.min(cols - 1.2, gx));
+  let outY = Math.max(0.8, Math.min(rows - 1.2, gy));
 
   for (const s of sectors) {
     const minX = s.x - STORE_MARGIN;
@@ -133,7 +106,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 }) => {
   const { cols: gridCols, rows: gridRows } = GROUND_DIMS[groundSize];
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const playerPos = useRef({ gx: 15.5, gy: 11.5 });
+  const playerPos = useRef({ gx: 14.0, gy: 11.5 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const camOffset = useRef({ x: 0, y: 0 });
   const zoomRef = useRef(1.1);
@@ -178,14 +151,17 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.12 : -0.12;
-    setZoom(zoomRef.current + delta);
+    setZoom(zoomRef.current + (e.deltaY < 0 ? 0.12 : -0.12));
   };
 
-  const getMapOrigin = (cssW: number) => ({
-    originX: cssW / 2 + camOffset.current.x,
-    originY: 68 + camOffset.current.y,
-  });
+  const getMapOrigin = (cssW: number, cssH: number) => {
+    const mapW = gridCols * TILE_SIZE;
+    const mapH = gridRows * TILE_SIZE;
+    return {
+      originX: (cssW - mapW) / 2 + camOffset.current.x,
+      originY: (cssH - mapH) / 2 + camOffset.current.y,
+    };
+  };
 
   const screenToWorld = (sx: number, sy: number, cssW: number, cssH: number) => {
     const z = zoomRef.current;
@@ -204,13 +180,14 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const { wx, wy } = screenToWorld(sx, sy, rect.width, rect.height);
-    const { originX, originY } = getMapOrigin(rect.width);
+    const { originX, originY } = getMapOrigin(rect.width, rect.height);
 
-    const { gx, gy } = isoToGrid(wx, wy, originX, originY);
-    const clampedX = Math.max(0.6, Math.min(gridCols - 1.2, gx));
-    const clampedY = Math.max(0.6, Math.min(gridRows - 1.2, gy));
+    const gx = (wx - originX) / TILE_SIZE;
+    const gy = (wy - originY) / TILE_SIZE;
+    const clampedX = Math.max(0.8, Math.min(gridCols - 1.2, gx));
+    const clampedY = Math.max(0.8, Math.min(gridRows - 1.2, gy));
 
-    targetPos.current = resolveStoreCollision(
+    targetPos.current = resolveCollision(
       clampedX,
       clampedY,
       playerPos.current.gx,
@@ -221,7 +198,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     );
 
     const clickedMember = members.find(
-      (m) => Math.hypot(clampedX - m.x, clampedY - m.y) < 1.2
+      (m) => Math.hypot(clampedX - m.x, clampedY - m.y) < 1.25
     );
     if (clickedMember) {
       onSelectMember(clickedMember);
@@ -242,67 +219,58 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     }
   };
 
-  const drawPalmTree = (
+  const drawDeskSet = (
     ctx: CanvasRenderingContext2D,
-    gx: number,
-    gy: number,
-    originX: number,
-    originY: number,
-    sway: number
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    accent: string
   ) => {
-    const base = gridToIso(gx, gy, originX, originY);
-    const topX = base.x + sway;
-    const topY = base.y - 38;
-
-    ctx.strokeStyle = "#7c4a21";
-    ctx.lineWidth = 4.5;
-    ctx.lineCap = "round";
+    ctx.fillStyle = "#e2e8f0";
     ctx.beginPath();
-    ctx.moveTo(base.x, base.y);
-    ctx.quadraticCurveTo(base.x + sway * 0.4, base.y - 20, topX, topY);
+    ctx.roundRect(x, y, w, h, 4);
+    ctx.fill();
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    const frondColors = ["#16a34a", "#22c55e", "#4ade80"];
-    const angles = [-2.5, -1.7, -0.8, 0.1, 0.9, 2.2];
-    angles.forEach((ang, i) => {
-      ctx.strokeStyle = frondColors[i % frondColors.length];
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(topX, topY);
-      ctx.quadraticCurveTo(
-        topX + Math.cos(ang) * 11,
-        topY + Math.sin(ang) * 7 - 6,
-        topX + Math.cos(ang) * 20,
-        topY + Math.sin(ang) * 12 + 4
-      );
-      ctx.stroke();
-    });
+    // Monitor screen
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(x + w * 0.25, y + 3, w * 0.5, 8);
+    ctx.fillStyle = accent;
+    ctx.fillRect(x + w * 0.28, y + 4.5, w * 0.44, 5);
     ctx.lineWidth = 1;
   };
 
-  const drawCar = (
+  const drawPineTree = (
     ctx: CanvasRenderingContext2D,
-    gx: number,
-    gy: number,
-    originX: number,
-    originY: number,
-    color: string
+    px: number,
+    py: number,
+    sway: number
   ) => {
-    const p = gridToIso(gx, gy, originX, originY);
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillStyle = "rgba(15, 23, 42, 0.2)";
     ctx.beginPath();
-    ctx.ellipse(p.x, p.y + 2, 14, 7, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py + 10, 11, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(p.x - 13, p.y - 10, 26, 10, 4);
-    ctx.fill();
+    ctx.fillStyle = "#78350f";
+    ctx.fillRect(px - 3, py + 2, 6, 8);
 
-    ctx.fillStyle = "#bae6fd";
-    ctx.beginPath();
-    ctx.roundRect(p.x - 8, p.y - 15, 16, 6, 3);
-    ctx.fill();
+    const tiers = [
+      { y: py + 3, r: 13, color: "#15803d" },
+      { y: py - 5, r: 10.5, color: "#16a34a" },
+      { y: py - 12, r: 7.5, color: "#22c55e" },
+    ];
+    tiers.forEach((t) => {
+      ctx.fillStyle = t.color;
+      ctx.beginPath();
+      ctx.moveTo(px + sway, t.y - t.r);
+      ctx.lineTo(px - t.r, t.y + t.r * 0.55);
+      ctx.lineTo(px + t.r, t.y + t.r * 0.55);
+      ctx.closePath();
+      ctx.fill();
+    });
   };
 
   useEffect(() => {
@@ -327,10 +295,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
       ctx.save();
       ctx.scale(dpr, dpr);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingEnabled = false;
 
-      const speed = 0.09;
+      const speed = 0.11;
       let dx = 0;
       let dy = 0;
       let isMoving = false;
@@ -340,13 +307,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       if (keysPressed.current["a"] || keysPressed.current["arrowleft"]) dx -= speed;
       if (keysPressed.current["d"] || keysPressed.current["arrowright"]) dx += speed;
 
-      const prevX = Math.max(0.6, Math.min(gridCols - 1.2, playerPos.current.gx));
-      const prevY = Math.max(0.6, Math.min(gridRows - 1.2, playerPos.current.gy));
+      const prevX = Math.max(0.8, Math.min(gridCols - 1.2, playerPos.current.gx));
+      const prevY = Math.max(0.8, Math.min(gridRows - 1.2, playerPos.current.gy));
       playerPos.current.gx = prevX;
       playerPos.current.gy = prevY;
 
       if (dx !== 0 || dy !== 0) {
-        const resolved = resolveStoreCollision(
+        const resolved = resolveCollision(
           prevX + dx,
           prevY + dy,
           prevX,
@@ -365,7 +332,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         if (dist > 0.08) {
           const stepX = prevX + (diffX / dist) * speed;
           const stepY = prevY + (diffY / dist) * speed;
-          const resolved = resolveStoreCollision(
+          const resolved = resolveCollision(
             stepX,
             stepY,
             prevX,
@@ -392,11 +359,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         walkPhase.current += 0.03;
       }
 
-      const pIsoPreview = gridToIso(playerPos.current.gx, playerPos.current.gy, cssW / 2, 68);
-      const panLimitX = groundSize === "mega" ? 440 : groundSize === "compact" ? 180 : 280;
-      const panLimitY = groundSize === "mega" ? 260 : groundSize === "compact" ? 110 : 160;
-      const desiredCamX = Math.max(-panLimitX, Math.min(panLimitX, cssW / 2 - pIsoPreview.x));
-      const desiredCamY = Math.max(-panLimitY, Math.min(panLimitY, cssH * 0.52 - pIsoPreview.y));
+      const { originX: baseOriginX, originY: baseOriginY } = getMapOrigin(cssW, cssH);
+      const pWorldX = baseOriginX + playerPos.current.gx * TILE_SIZE;
+      const pWorldY = baseOriginY + playerPos.current.gy * TILE_SIZE;
+      const desiredCamX = Math.max(-240, Math.min(240, (cssW / 2 - pWorldX) * 0.45));
+      const desiredCamY = Math.max(-160, Math.min(160, (cssH / 2 - pWorldY) * 0.45));
       camOffset.current.x += (desiredCamX - camOffset.current.x) * 0.08;
       camOffset.current.y += (desiredCamY - camOffset.current.y) * 0.08;
 
@@ -404,19 +371,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         sectors.find((s) => {
           const cx = s.x + s.width / 2;
           const cy = s.y + s.height / 2;
-          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 3.1;
+          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 3.4;
         }) || null;
 
       setNearbySector((prev) => (prev?.id === foundNear?.id ? prev : foundNear));
 
       ctx.clearRect(0, 0, cssW, cssH);
-
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, cssH);
-      skyGrad.addColorStop(0, "#311042");
-      skyGrad.addColorStop(0.35, "#7e22ce");
-      skyGrad.addColorStop(0.65, "#ec4899");
-      skyGrad.addColorStop(1, "#0284c7");
-      ctx.fillStyle = skyGrad;
+      ctx.fillStyle = "#dcfce7";
       ctx.fillRect(0, 0, cssW, cssH);
 
       const z = zoomRef.current;
@@ -424,216 +385,122 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.scale(z, z);
       ctx.translate(-cssW / 2, -cssH / 2);
 
-      const { originX, originY } = getMapOrigin(cssW);
+      const { originX, originY } = getMapOrigin(cssW, cssH);
+      const campusCols = gridCols - 6;
+      const campusRows = gridRows - 2;
 
-      const roadRowStart = Math.floor(gridRows * 0.58);
-      const beachRowStart = roadRowStart + 2;
-      const oceanRowStart = beachRowStart + 4;
-      const crossColA = Math.floor(gridCols * 0.48);
-      const crossColB = crossColA + 1;
-
+      // Exterior grass tiles around campus
       for (let r = 0; r < gridRows; r++) {
         for (let c = 0; c < gridCols; c++) {
-          const p0 = gridToIso(c, r, originX, originY);
-          const p1 = gridToIso(c + 1, r, originX, originY);
-          const p2 = gridToIso(c + 1, r + 1, originX, originY);
-          const p3 = gridToIso(c, r + 1, originX, originY);
+          const x = originX + c * TILE_SIZE;
+          const y = originY + r * TILE_SIZE;
+          const inCampus = r >= 1 && r < campusRows && c >= 1 && c < campusCols;
 
-          let tileFill = (r + c) % 2 === 0 ? "#cbd5e1" : "#94a3b8";
-          if (r >= roadRowStart && r < beachRowStart) {
-            tileFill = "#1e293b";
-          } else if (r >= beachRowStart && r < oceanRowStart) {
-            tileFill = (r + c) % 2 === 0 ? "#fde68a" : "#fcd34d";
-          } else if (r >= oceanRowStart) {
-            tileFill = (r + c) % 2 === 0 ? "#06b6d4" : "#0284c7";
-          } else if (c === crossColA || c === crossColB) {
-            tileFill = "#1e293b";
-          } else if (
-            r >= 5 &&
-            r <= roadRowStart - 2 &&
-            c >= crossColA - 5 &&
-            c <= crossColB + 5
-          ) {
-            tileFill = (r + c) % 2 === 0 ? "#86efac" : "#4ade80";
+          if (!inCampus) {
+            ctx.fillStyle = (r + c) % 2 === 0 ? "#bbf7d0" : "#86efac";
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          } else {
+            ctx.fillStyle = (r + c) % 2 === 0 ? "#f8fafc" : "#f1f5f9";
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+            ctx.lineWidth = 1 / z;
+            ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
           }
-
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p3.x, p3.y);
-          ctx.closePath();
-          ctx.fillStyle = tileFill;
-          ctx.fill();
-          ctx.strokeStyle = "rgba(15, 23, 42, 0.14)";
-          ctx.lineWidth = 1 / z;
-          ctx.stroke();
         }
       }
+
+      // Campus outer walls & zone bays (Team Settlement, dApp Stores, Creators Corner)
+      const cx0 = originX + TILE_SIZE;
+      const cy0 = originY + TILE_SIZE;
+      const cw = (campusCols - 1) * TILE_SIZE;
+      const ch = (campusRows - 1) * TILE_SIZE;
+
+      ctx.strokeStyle = "#64748b";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(cx0, cy0, cw, ch);
       ctx.lineWidth = 1;
 
-      LAMP_SPOTS.filter((lp) => lp.x < gridCols - 1 && lp.y < gridRows - 1).forEach((lp) => {
-        const pos = gridToIso(lp.x, lp.y, originX, originY);
-        ctx.strokeStyle = "#f8fafc";
+      // Team Member Settlement Bays (Top & Left Rooms)
+      const teamRooms = [
+        { gx: 2, gy: 2, gw: 8, gh: 6, floor: "#e0e7ff", label: "TEAM SETTLEMENT" },
+        { gx: 12, gy: 2, gw: 9, gh: 6, floor: "#f1f5f9", label: "BUILDER LOUNGE" },
+        { gx: 2, gy: 10, gw: 8, gh: 6, floor: "#fef3c7", label: "OPS & SQUAD DESKS" },
+        { gx: 12, gy: 10, gw: 9, gh: 6, floor: "#e0f2fe", label: "CORE TEAM HUB" },
+      ];
+
+      teamRooms.forEach((rm) => {
+        if (rm.gx + rm.gw > campusCols || rm.gy + rm.gh > campusRows) return;
+        const rx = originX + rm.gx * TILE_SIZE;
+        const ry = originY + rm.gy * TILE_SIZE;
+        const rw = rm.gw * TILE_SIZE;
+        const rh = rm.gh * TILE_SIZE;
+
+        ctx.fillStyle = rm.floor;
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = "#94a3b8";
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y);
-        ctx.lineTo(pos.x, pos.y - 22);
-        ctx.stroke();
-        ctx.fillStyle = "#fde047";
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y - 24, 4, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.strokeRect(rx, ry, rw, rh);
         ctx.lineWidth = 1;
+
+        drawDeskSet(ctx, rx + 16, ry + 18, 44, 18, "#3b82f6");
+        drawDeskSet(ctx, rx + rw - 64, ry + 18, 44, 18, "#8b5cf6");
+
+        ctx.font = "bold 9px system-ui, sans-serif";
+        ctx.fillStyle = "#475569";
+        ctx.textAlign = "left";
+        ctx.fillText(rm.label, rx + 8, ry + 12);
       });
 
-      const netA = gridToIso(crossColA - 4, beachRowStart + 1.5, originX, originY);
-      const netB = gridToIso(crossColA, beachRowStart + 1.5, originX, originY);
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(netA.x, netA.y);
-      ctx.lineTo(netA.x, netA.y - 16);
-      ctx.moveTo(netB.x, netB.y);
-      ctx.lineTo(netB.x, netB.y - 16);
-      ctx.moveTo(netA.x, netA.y - 14);
-      ctx.lineTo(netB.x, netB.y - 14);
-      ctx.stroke();
-      ctx.lineWidth = 1;
+      // Creators Corner Zone (Right Wing)
+      const ccX = originX + 23 * TILE_SIZE;
+      const ccY = originY + 2 * TILE_SIZE;
+      const ccW = 7 * TILE_SIZE;
+      const ccH = 14 * TILE_SIZE;
+      if (23 + 7 <= campusCols && 2 + 14 <= campusRows) {
+        ctx.fillStyle = "#fce7f3";
+        ctx.fillRect(ccX, ccY, ccW, ccH);
+        ctx.strokeStyle = "#ec4899";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(ccX, ccY, ccW, ccH);
+        ctx.lineWidth = 1;
 
-      const carSpan = Math.max(14, gridCols - 8);
-      const carOffset = ((walkPhase.current * 14) % carSpan) + 3;
-      drawCar(ctx, carOffset, roadRowStart + 0.4, originX, originY, "#f43f5e");
-      drawCar(ctx, gridCols - 4 - (carOffset % (carSpan - 2)), roadRowStart + 1.3, originX, originY, "#facc15");
+        ctx.font = "bold 10px system-ui, sans-serif";
+        ctx.fillStyle = "#be185d";
+        ctx.textAlign = "center";
+        ctx.fillText("CREATORS CORNER", ccX + ccW / 2, ccY + 14);
+        drawDeskSet(ctx, ccX + 22, ccY + 34, 52, 20, "#ec4899");
+        drawDeskSet(ctx, ccX + ccW - 76, ccY + 140, 52, 20, "#f43f5e");
+      }
 
-      const sway = Math.sin(walkPhase.current * 0.6) * 2.5;
-      PALM_SPOTS.filter((pt) => pt.x < gridCols - 1 && pt.y < gridRows - 1).forEach((pt) =>
-        drawPalmTree(ctx, pt.x, pt.y, originX, originY, sway)
-      );
-
-      // HD Textured Stores / Landmarks
+      // dApp Stores (Bottom Storefront Row)
       sectors.forEach((sec) => {
-        const topLeft = gridToIso(sec.x, sec.y, originX, originY);
-        const topRight = gridToIso(sec.x + sec.width, sec.y, originX, originY);
-        const bottomRight = gridToIso(sec.x + sec.width, sec.y + sec.height, originX, originY);
-        const bottomLeft = gridToIso(sec.x, sec.y + sec.height, originX, originY);
-
-        const counterH = 18;
-        const roofH = 46;
+        const sx = originX + sec.x * TILE_SIZE;
+        const sy = originY + sec.y * TILE_SIZE;
+        const sw = sec.width * TILE_SIZE;
+        const sh = sec.height * TILE_SIZE;
         const isSelected = selectedSector?.id === sec.id;
         const isNear = foundNear?.id === sec.id;
 
-        const baseColor = sec.color;
-        const darkWall = shadeHex(baseColor, -32);
-        const lightTrim = shadeHex(baseColor, 35);
-
-        ctx.beginPath();
-        ctx.moveTo(topLeft.x, topLeft.y);
-        ctx.lineTo(topRight.x, topRight.y);
-        ctx.lineTo(bottomRight.x, bottomRight.y);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y);
-        ctx.closePath();
-        ctx.fillStyle = "rgba(15, 23, 42, 0.32)";
-        ctx.fill();
-        ctx.lineWidth = (isSelected || isNear ? 2.5 : 1) / z;
-        ctx.strokeStyle = isSelected || isNear ? "#facc15" : "rgba(15,23,42,0.35)";
-        ctx.stroke();
+        ctx.fillStyle = shadeHex(sec.color, 65);
+        ctx.fillRect(sx, sy, sw, sh);
+        ctx.lineWidth = isSelected || isNear ? 3 : 2;
+        ctx.strokeStyle = isSelected || isNear ? "#facc15" : sec.color;
+        ctx.strokeRect(sx, sy, sw, sh);
         ctx.lineWidth = 1;
 
-        const frontGrad = ctx.createLinearGradient(0, bottomLeft.y - counterH, 0, bottomLeft.y);
-        frontGrad.addColorStop(0, lightTrim);
-        frontGrad.addColorStop(1, darkWall);
+        // Storefront counter bar
+        ctx.fillStyle = sec.color;
+        ctx.fillRect(sx + 6, sy + sh - 16, sw - 12, 10);
+
+        // Logo badge & store name
+        const badgeX = sx + sw / 2;
+        const badgeY = sy + 20;
         ctx.beginPath();
-        ctx.moveTo(bottomLeft.x, bottomLeft.y);
-        ctx.lineTo(bottomRight.x, bottomRight.y);
-        ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - counterH);
-        ctx.closePath();
-        ctx.fillStyle = frontGrad;
+        ctx.arc(badgeX, badgeY, 12, 0, Math.PI * 2);
+        ctx.fillStyle = "#0f172a";
         ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(bottomRight.x, bottomRight.y);
-        ctx.lineTo(topRight.x, topRight.y);
-        ctx.lineTo(topRight.x, topRight.y - counterH);
-        ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
-        ctx.closePath();
-        ctx.fillStyle = darkWall;
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(topLeft.x, topLeft.y - counterH);
-        ctx.lineTo(topRight.x, topRight.y - counterH);
-        ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - counterH);
-        ctx.closePath();
-        ctx.fillStyle = "#f8fafc";
-        ctx.fill();
-
-        ctx.strokeStyle = "#38bdf8";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(bottomLeft.x + 4, bottomLeft.y - counterH + 5);
-        ctx.lineTo(bottomRight.x - 4, bottomRight.y - counterH + 5);
-        ctx.stroke();
-        ctx.lineWidth = 1;
-
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = 2.6;
-        [topLeft, topRight, bottomRight, bottomLeft].forEach((corner) => {
-          ctx.beginPath();
-          ctx.moveTo(corner.x, corner.y - counterH);
-          ctx.lineTo(corner.x, corner.y - roofH);
-          ctx.stroke();
-        });
-        ctx.lineWidth = 1;
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(topLeft.x, topLeft.y - roofH);
-        ctx.lineTo(topRight.x, topRight.y - roofH);
-        ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH);
-        ctx.closePath();
-        ctx.fillStyle = baseColor;
-        ctx.fill();
-        ctx.clip();
-
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-        ctx.lineWidth = 6;
-        for (let sx = topLeft.x - 140; sx < topRight.x + 140; sx += 14) {
-          ctx.beginPath();
-          ctx.moveTo(sx, topLeft.y - roofH - 60);
-          ctx.lineTo(sx + 70, bottomRight.y - roofH + 60);
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.moveTo(topLeft.x, topLeft.y - roofH);
-        ctx.lineTo(topRight.x, topRight.y - roofH);
-        ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH);
-        ctx.closePath();
-        ctx.lineWidth = isSelected || isNear ? 3 : 1.5;
-        ctx.strokeStyle = isSelected || isNear ? "#facc15" : "#ffffff";
-        ctx.stroke();
-        ctx.lineWidth = 1;
-
-        const center = gridToIso(
-          sec.x + sec.width / 2,
-          sec.y + sec.height / 2,
-          originX,
-          originY
-        );
-
-        const signY = center.y - roofH - 18;
-        ctx.beginPath();
-        ctx.arc(center.x, signY, 14, 0, Math.PI * 2);
-        ctx.fillStyle = "#090d1a";
-        ctx.fill();
-        ctx.strokeStyle = isNear ? "#facc15" : "#ffffff";
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
         ctx.stroke();
         ctx.lineWidth = 1;
 
@@ -641,167 +508,168 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(center.x, signY, 12, 0, Math.PI * 2);
+          ctx.arc(badgeX, badgeY, 10, 0, Math.PI * 2);
           ctx.clip();
-          ctx.drawImage(cachedImg, center.x - 12, signY - 12, 24, 24);
+          ctx.drawImage(cachedImg, badgeX - 10, badgeY - 10, 20, 20);
           ctx.restore();
         } else {
-          ctx.font = "bold 11px system-ui, sans-serif";
-          ctx.textAlign = "center";
+          ctx.font = "bold 10px system-ui, sans-serif";
           ctx.fillStyle = "#ffffff";
-          ctx.fillText(sec.logoText, center.x, signY + 4);
+          ctx.textAlign = "center";
+          ctx.fillText(sec.logoText, badgeX, badgeY + 3.5);
         }
 
-        ctx.font = "bold 11px system-ui, sans-serif";
+        ctx.font = "bold 10px system-ui, sans-serif";
+        ctx.fillStyle = "#0f172a";
         ctx.textAlign = "center";
-        const labelW = ctx.measureText(sec.name).width + 14;
-        ctx.fillStyle = "rgba(9, 13, 26, 0.9)";
-        ctx.beginPath();
-        ctx.roundRect(center.x - labelW / 2, center.y - roofH - 6, labelW, 17, 6);
-        ctx.fill();
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(sec.name, center.x, center.y - roofH + 6);
+        ctx.fillText(sec.name, badgeX, badgeY + 23);
 
         if (isNear) {
-          const popupText = `${sec.name}: ${sec.description.slice(0, 44)}${
-            sec.description.length > 44 ? "..." : ""
+          const popupText = `${sec.name}: ${sec.description.slice(0, 42)}${
+            sec.description.length > 42 ? "..." : ""
           }`;
           ctx.font = "bold 11px system-ui, sans-serif";
-          const textW = Math.min(270, ctx.measureText(popupText).width + 22);
-          const boxX = center.x - textW / 2;
-          const boxY = signY - 46;
+          const textW = Math.min(265, ctx.measureText(popupText).width + 20);
+          const boxX = badgeX - textW / 2;
+          const boxY = sy - 32;
 
-          ctx.fillStyle = "rgba(15, 23, 42, 0.96)";
+          ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
           ctx.beginPath();
-          ctx.roundRect(boxX, boxY, textW, 27, 8);
+          ctx.roundRect(boxX, boxY, textW, 24, 7);
           ctx.fill();
           ctx.strokeStyle = "#38bdf8";
-          ctx.lineWidth = 1.6;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
           ctx.lineWidth = 1;
 
           ctx.fillStyle = "#f8fafc";
-          ctx.textAlign = "center";
-          ctx.fillText(popupText, boxX + textW / 2, boxY + 17.5);
+          ctx.fillText(popupText, boxX + textW / 2, boxY + 15.5);
         }
       });
 
-      // Builders / Creators / Members
+      // Pine trees around exterior
+      const sway = Math.sin(walkPhase.current * 0.6) * 1.5;
+      PINE_TREES.filter((t) => t.gx < gridCols && t.gy < gridRows).forEach((t) => {
+        drawPineTree(ctx, originX + t.gx * TILE_SIZE, originY + t.gy * TILE_SIZE, sway);
+      });
+
+      // Settled Team Members & Creators (stationary with clean ● Name pill)
       members.forEach((m, index) => {
-        const mPos = gridToIso(m.x, m.y, originX, originY);
+        const px = originX + m.x * TILE_SIZE;
+        const py = originY + m.y * TILE_SIZE;
         const w = m.bodyWidth;
         const h = m.bodyHeight;
-        const torsoW = 13 * w;
-        const torsoH = 16 * h;
-        const headR = 6.5;
+        const torsoW = 12 * w;
+        const torsoH = 14 * h;
         const isSelected = selectedMember?.id === m.id;
-        const idleWave = Math.sin(walkPhase.current * 1.3 + index * 1.5) * (isSelected ? 4.5 : 0);
+        const wave = Math.sin(walkPhase.current * 1.4 + index) * (isSelected ? 4 : 0);
 
+        ctx.fillStyle = isSelected ? "rgba(250,204,21,0.45)" : "rgba(15,23,42,0.25)";
         ctx.beginPath();
-        ctx.ellipse(mPos.x, mPos.y + 2, 10 * w, 5, 0, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? "rgba(250,204,21,0.55)" : "rgba(0,0,0,0.38)";
+        ctx.ellipse(px, py + 7, 9 * w, 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        const shoulderY = mPos.y - 2 - torsoH + 3;
         ctx.strokeStyle = m.skinTone;
-        ctx.lineWidth = Math.max(2.2, 2.8 * w);
-        ctx.lineCap = "round";
-
+        ctx.lineWidth = 2.5 * w;
         ctx.beginPath();
-        ctx.moveTo(mPos.x - torsoW / 2, shoulderY);
-        ctx.lineTo(mPos.x - torsoW / 2 - 4 * w, shoulderY + 7);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(mPos.x + torsoW / 2, shoulderY);
-        ctx.lineTo(mPos.x + torsoW / 2 + 4 * w, shoulderY + 7 - Math.abs(idleWave));
+        ctx.moveTo(px - torsoW / 2, py - torsoH + 4);
+        ctx.lineTo(px - torsoW / 2 - 3 * w, py - 2);
+        ctx.moveTo(px + torsoW / 2, py - torsoH + 4);
+        ctx.lineTo(px + torsoW / 2 + 3 * w, py - 2 - Math.abs(wave));
         ctx.stroke();
 
         ctx.fillStyle = m.outfitColor;
         ctx.beginPath();
-        ctx.roundRect(mPos.x - torsoW / 2, mPos.y - 2 - torsoH, torsoW, torsoH, 4);
+        ctx.roundRect(px - torsoW / 2, py - torsoH, torsoW, torsoH, 4);
         ctx.fill();
 
-        const headY = mPos.y - 4 - torsoH - headR;
+        const headY = py - torsoH - 6.5;
         ctx.beginPath();
-        ctx.arc(mPos.x, headY, headR, 0, Math.PI * 2);
+        ctx.arc(px, headY, 6, 0, Math.PI * 2);
         ctx.fillStyle = m.skinTone;
         ctx.fill();
 
         if (m.visor) {
           ctx.fillStyle = "#38bdf8";
-          ctx.fillRect(mPos.x - headR * 0.7, headY - 2, headR * 1.4, 3.5);
+          ctx.fillRect(px - 4, headY - 1.5, 8, 3);
         }
 
+        // Gather-style pill tag above settled member/creator
+        const tagText = `● ${m.name}`;
         ctx.font = "bold 10px system-ui, sans-serif";
+        const tagW = ctx.measureText(tagText).width + 12;
+        ctx.fillStyle = isSelected ? "#facc15" : "#0f172a";
+        ctx.beginPath();
+        ctx.roundRect(px - tagW / 2, headY - 21, tagW, 15, 7);
+        ctx.fill();
+        ctx.fillStyle = isSelected ? "#0f172a" : "#ffffff";
         ctx.textAlign = "center";
-        ctx.fillStyle = "#fde047";
-        ctx.fillText(`${m.name} (${m.role})`, mPos.x, headY - headR - 5);
+        ctx.fillText(tagText, px, headY - 10.5);
       });
 
       // Player Avatar
-      const pScreen = gridToIso(playerPos.current.gx, playerPos.current.gy, originX, originY);
+      const pX = originX + playerPos.current.gx * TILE_SIZE;
+      const pY = originY + playerPos.current.gy * TILE_SIZE;
       const wScale = avatar.bodyWidth;
       const hScale = avatar.bodyHeight;
-      const headR = 7 * avatar.headScale;
-      const torsoW = 14 * wScale;
-      const torsoH = 18 * hScale;
+      const headR = 6.5 * avatar.headScale;
+      const torsoW = 13 * wScale;
+      const torsoH = 15 * hScale;
 
-      const armAmp = isMoving ? 7.5 : 0;
-      const leftArmOffset = isMoving ? Math.sin(walkPhase.current) * armAmp : 0;
-      const rightArmOffset = isMoving ? Math.sin(walkPhase.current + Math.PI) * armAmp : 0;
-      const legOffset = isMoving ? Math.sin(walkPhase.current) * 3 : 0;
+      const armAmp = isMoving ? 6 : 0;
+      const leftArm = isMoving ? Math.sin(walkPhase.current) * armAmp : 0;
+      const rightArm = isMoving ? Math.sin(walkPhase.current + Math.PI) * armAmp : 0;
+      const legSwing = isMoving ? Math.sin(walkPhase.current) * 2.5 : 0;
 
+      ctx.fillStyle = "rgba(15, 23, 42, 0.32)";
       ctx.beginPath();
-      ctx.ellipse(pScreen.x, pScreen.y + 2, 11 * wScale, 5.5, 0, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.ellipse(pX, pY + 7, 10 * wScale, 4.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = avatar.skinTone;
-      ctx.lineWidth = 3 * wScale;
-      ctx.lineCap = "round";
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 2.8 * wScale;
       ctx.beginPath();
-      ctx.moveTo(pScreen.x - 4 * wScale, pScreen.y - 2);
-      ctx.lineTo(pScreen.x - 4 * wScale, pScreen.y + 5 + legOffset);
-      ctx.moveTo(pScreen.x + 4 * wScale, pScreen.y - 2);
-      ctx.lineTo(pScreen.x + 4 * wScale, pScreen.y + 5 - legOffset);
+      ctx.moveTo(pX - 3.5 * wScale, pY + 1);
+      ctx.lineTo(pX - 3.5 * wScale, pY + 6 + legSwing);
+      ctx.moveTo(pX + 3.5 * wScale, pY + 1);
+      ctx.lineTo(pX + 3.5 * wScale, pY + 6 - legSwing);
       ctx.stroke();
 
       ctx.fillStyle = avatar.outfitColor;
       ctx.beginPath();
-      ctx.roundRect(pScreen.x - torsoW / 2, pScreen.y - 2 - torsoH, torsoW, torsoH, 5);
+      ctx.roundRect(pX - torsoW / 2, pY - torsoH, torsoW, torsoH, 4);
       ctx.fill();
 
-      const pShoulderY = pScreen.y - 2 - torsoH + 4;
       ctx.strokeStyle = avatar.skinTone;
-      ctx.lineWidth = Math.max(2.5, 3.2 * wScale);
-      ctx.lineCap = "round";
-
+      ctx.lineWidth = 2.8 * wScale;
       ctx.beginPath();
-      ctx.moveTo(pScreen.x - torsoW / 2, pShoulderY);
-      ctx.lineTo(pScreen.x - torsoW / 2 - 5 * wScale, pShoulderY + 8 + leftArmOffset);
+      ctx.moveTo(pX - torsoW / 2, pY - torsoH + 4);
+      ctx.lineTo(pX - torsoW / 2 - 4 * wScale, pY - 1 + leftArm);
+      ctx.moveTo(pX + torsoW / 2, pY - torsoH + 4);
+      ctx.lineTo(pX + torsoW / 2 + 4 * wScale, pY - 1 + rightArm);
       ctx.stroke();
 
+      const headY = pY - torsoH - headR;
       ctx.beginPath();
-      ctx.moveTo(pScreen.x + torsoW / 2, pShoulderY);
-      ctx.lineTo(pScreen.x + torsoW / 2 + 5 * wScale, pShoulderY + 8 + rightArmOffset);
-      ctx.stroke();
-
-      const headY = pScreen.y - 4 - torsoH - headR;
-      ctx.beginPath();
-      ctx.arc(pScreen.x, headY, headR, 0, Math.PI * 2);
+      ctx.arc(pX, headY, headR, 0, Math.PI * 2);
       ctx.fillStyle = avatar.skinTone;
       ctx.fill();
 
       if (avatar.visor) {
         ctx.fillStyle = "#38bdf8";
-        ctx.fillRect(pScreen.x - headR * 0.7, headY - 2, headR * 1.4, 4);
+        ctx.fillRect(pX - headR * 0.65, headY - 2, headR * 1.3, 3.5);
       }
 
-      ctx.font = "bold 11px system-ui, sans-serif";
-      ctx.textAlign = "center";
+      const pTag = avatar.name || "Citizen";
+      ctx.font = "bold 10px system-ui, sans-serif";
+      const pTagW = ctx.measureText(pTag).width + 12;
+      ctx.fillStyle = "#0052FF";
+      ctx.beginPath();
+      ctx.roundRect(pX - pTagW / 2, headY - headR - 16, pTagW, 15, 7);
+      ctx.fill();
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(avatar.name || "Citizen", pScreen.x, headY - headR - 6);
+      ctx.textAlign = "center";
+      ctx.fillText(pTag, pX, headY - headR - 5.5);
 
       ctx.restore();
       animId = requestAnimationFrame(render);
@@ -893,7 +761,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           position: "absolute",
           bottom: 12,
           left: 12,
-          background: "rgba(15, 23, 42, 0.85)",
+          background: "rgba(15, 23, 42, 0.88)",
           border: "1px solid rgba(148, 163, 184, 0.25)",
           borderRadius: 10,
           padding: "8px 12px",
@@ -901,7 +769,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           color: "#e2e8f0",
         }}
       >
-        Ground: <b>{groundSize.toUpperCase()} ({gridCols}×{gridRows})</b> • Use <b>Hide ✕</b> for full view
+        Team Rooms • dApp Stores • Creators Corner ({groundSize.toUpperCase()})
         {nearbySector && (
           <span style={{ marginLeft: 10, color: "#38bdf8" }}>
             Near: <b>{nearbySector.name}</b>
