@@ -91,7 +91,9 @@ export function App() {
   const [theme, setTheme] = useState<CityThemeConfig>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_THEME_KEY);
-      return saved ? { ...DEFAULT_THEME, ...(JSON.parse(saved) as Partial<CityThemeConfig>) } : DEFAULT_THEME;
+      return saved
+        ? { ...DEFAULT_THEME, ...(JSON.parse(saved) as Partial<CityThemeConfig>) }
+        : DEFAULT_THEME;
     } catch {
       return DEFAULT_THEME;
     }
@@ -282,21 +284,47 @@ export function App() {
     }
   };
 
+  const secondaryDrawerStyle: React.CSSProperties = {
+    position: "absolute",
+    bottom: 62,
+    right: 12,
+    zIndex: 11,
+    width: "min(290px, calc(100vw - 24px))",
+    maxHeight: "calc(100% - 140px)",
+    overflowY: "auto",
+    background: "rgba(15, 23, 42, 0.96)",
+    border: "1px solid rgba(56, 189, 248, 0.35)",
+    borderRadius: 14,
+    padding: 14,
+    color: "#f8fafc",
+    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.45)",
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100dvh",
+        height: "100dvh",
+        width: "100vw",
+        overflow: "hidden",
+      }}
+    >
       <header
         style={{
-          height: 54,
-          padding: "0 16px",
+          minHeight: 54,
+          padding: "8px 14px",
           background: "#0b1120",
           borderBottom: "1px solid rgba(148, 163, 184, 0.2)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 12,
+          flexWrap: "wrap",
+          gap: 8,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span
             style={{
               width: 14,
@@ -306,7 +334,7 @@ export function App() {
               display: "inline-block",
             }}
           />
-          <strong style={{ fontSize: 16 }}>BASE CITY</strong>
+          <strong style={{ fontSize: 15 }}>BASE CITY</strong>
           <button
             type="button"
             onClick={() => setMarketDrawerOpen((prev) => !prev)}
@@ -325,9 +353,17 @@ export function App() {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#cbd5e1" }}>
-            <span>City Size:</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "#cbd5e1",
+            }}
+          >
+            <span>Size:</span>
             <select
               value={groundSize}
               onChange={(e) => setGroundSize(e.target.value as CityGroundSize)}
@@ -348,20 +384,20 @@ export function App() {
           </label>
 
           {walletStatus && (
-            <span style={{ fontSize: 12, color: "#93c5fd" }}>{walletStatus}</span>
+            <span style={{ fontSize: 11, color: "#93c5fd" }}>{walletStatus}</span>
           )}
           <button
             type="button"
             onClick={connectBaseWallet}
             style={{
-              padding: "7px 14px",
+              padding: "6px 12px",
               borderRadius: 8,
               border: "none",
               background: "#0052FF",
               color: "#fff",
               fontWeight: 600,
               cursor: "pointer",
-              fontSize: 13,
+              fontSize: 12,
             }}
           >
             {walletAddress
@@ -392,7 +428,7 @@ export function App() {
               boxShadow: "0 8px 20px rgba(0,0,0,0.35)",
             }}
           >
-            ☰ Show Shape & Tools
+            ☰ Show Tools
           </button>
         ) : (
           <div
@@ -401,11 +437,20 @@ export function App() {
               top: 12,
               left: 12,
               zIndex: 10,
-              maxHeight: "calc(100vh - 76px)",
+              width: "min(310px, calc(100vw - 24px))",
+              maxHeight: "calc(100% - 88px)",
               overflowY: "auto",
             }}
           >
-            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 5,
+                marginBottom: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -522,7 +567,7 @@ export function App() {
           </div>
         )}
 
-        <div style={{ flex: 1, height: "100%" }}>
+        <div style={{ flex: 1, width: "100%", height: "100%" }}>
           <BaseCityCanvas
             avatar={avatar}
             theme={theme}
@@ -544,41 +589,57 @@ export function App() {
         </div>
 
         {marketDrawerOpen && (
-          <aside
-            style={{
-              position: "absolute",
-              top: 12,
-              right: 248,
-              zIndex: 11,
-              width: 280,
-              background: "rgba(15, 23, 42, 0.96)",
-              border: "1px solid rgba(56, 189, 248, 0.4)",
-              borderRadius: 14,
-              padding: 16,
-              color: "#f8fafc",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <aside style={secondaryDrawerStyle}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <span style={{ fontSize: 11, color: "#38bdf8", fontWeight: 700 }}>
                 BASE TVL & MARKET CORNER
               </span>
               <button
                 type="button"
                 onClick={() => setMarketDrawerOpen(false)}
-                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer" }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
               >
                 ✕
               </button>
             </div>
-            <h3 style={{ margin: "6px 0 10px", fontSize: 17 }}>
+            <h3 style={{ margin: "6px 0 10px", fontSize: 16 }}>
               TVL: {marketSnapshot.tvl} ({marketSnapshot.tvlChange24h})
             </h3>
-            <div style={{ fontSize: 12, lineHeight: 1.7, color: "#e2e8f0", marginBottom: 12 }}>
-              <div>Status: <b>{marketSnapshot.marketStatus}</b></div>
-              <div>Stablecoins: <b>{marketSnapshot.stablecoins}</b></div>
-              <div>24h DEX Vol: <b>{marketSnapshot.dexVol24h}</b></div>
-              <div>Active Addrs (24h): <b>{marketSnapshot.activeAddresses24h}</b></div>
-              <div style={{ color: "#94a3b8", fontSize: 11 }}>Source: {marketSnapshot.updatedLabel}</div>
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.7,
+                color: "#e2e8f0",
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                Status: <b>{marketSnapshot.marketStatus}</b>
+              </div>
+              <div>
+                Stablecoins: <b>{marketSnapshot.stablecoins}</b>
+              </div>
+              <div>
+                24h DEX Vol: <b>{marketSnapshot.dexVol24h}</b>
+              </div>
+              <div>
+                Active Addrs (24h): <b>{marketSnapshot.activeAddresses24h}</b>
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 11 }}>
+                Source: {marketSnapshot.updatedLabel}
+              </div>
             </div>
             <button
               type="button"
@@ -601,36 +662,42 @@ export function App() {
         )}
 
         {selectedSector && (
-          <aside
-            style={{
-              position: "absolute",
-              top: 12,
-              right: 248,
-              zIndex: 10,
-              width: 280,
-              background: "rgba(15, 23, 42, 0.94)",
-              border: "1px solid rgba(148, 163, 184, 0.25)",
-              borderRadius: 14,
-              padding: 16,
-              color: "#f8fafc",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <aside style={secondaryDrawerStyle}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 700 }}>
                 {selectedSector.zone.toUpperCase()}
               </span>
               <button
                 type="button"
                 onClick={() => setSelectedSector(null)}
-                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer" }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
               >
                 ✕
               </button>
             </div>
-            <h3 style={{ margin: "6px 0 4px", fontSize: 17 }}>
+            <h3 style={{ margin: "6px 0 4px", fontSize: 16 }}>
               [{selectedSector.logoText}] {selectedSector.name}
             </h3>
-            <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.5, color: "#e2e8f0" }}>
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "#e2e8f0",
+              }}
+            >
               {selectedSector.description}
             </p>
             <a
@@ -654,34 +721,40 @@ export function App() {
         )}
 
         {selectedMember && (
-          <aside
-            style={{
-              position: "absolute",
-              top: 12,
-              right: 248,
-              zIndex: 10,
-              width: 280,
-              background: "rgba(15, 23, 42, 0.94)",
-              border: "1px solid rgba(148, 163, 184, 0.25)",
-              borderRadius: 14,
-              padding: 16,
-              color: "#f8fafc",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <aside style={secondaryDrawerStyle}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <span style={{ fontSize: 11, color: "#fde047", fontWeight: 700 }}>
                 {selectedMember.role.toUpperCase()} • {selectedMember.handle}
               </span>
               <button
                 type="button"
                 onClick={() => setSelectedMember(null)}
-                style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: 16, cursor: "pointer" }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: 16,
+                  cursor: "pointer",
+                }}
               >
                 ✕
               </button>
             </div>
-            <h3 style={{ margin: "6px 0 4px", fontSize: 17 }}>{selectedMember.name}</h3>
-            <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.5, color: "#e2e8f0" }}>
+            <h3 style={{ margin: "6px 0 4px", fontSize: 16 }}>{selectedMember.name}</h3>
+            <p
+              style={{
+                margin: "0 0 12px",
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "#e2e8f0",
+              }}
+            >
               {selectedMember.bio}
             </p>
             <a
