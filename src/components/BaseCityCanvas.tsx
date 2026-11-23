@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { CityMember, CitySector } from "../data/sectors";
 import { AvatarConfig } from "./AvatarCustomizer";
+import { CityDecorItem, DecorKind } from "./CityManagerTool";
 
 export type CityGroundSize = "compact" | "standard" | "mega";
 
@@ -8,6 +9,9 @@ interface BaseCityCanvasProps {
   avatar: AvatarConfig;
   sectors: CitySector[];
   members: CityMember[];
+  decorItems: CityDecorItem[];
+  placingDecorKind: DecorKind | null;
+  onPlaceDecorAt: (gx: number, gy: number) => void;
   groundSize: CityGroundSize;
   selectedSector: CitySector | null;
   selectedMember: CityMember | null;
@@ -25,19 +29,6 @@ const TILE_SIZE = 32;
 const STORE_MARGIN = 0.45;
 const MIN_ZOOM = 0.65;
 const MAX_ZOOM = 2.8;
-
-const PINE_TREES = [
-  { gx: 31.5, gy: 2.2 },
-  { gx: 34.5, gy: 1.8 },
-  { gx: 32.5, gy: 6.5 },
-  { gx: 35.2, gy: 8.8 },
-  { gx: 31.8, gy: 14.5 },
-  { gx: 35.0, gy: 17.5 },
-  { gx: 33.2, gy: 21.0 },
-  { gx: 41.0, gy: 4.5 },
-  { gx: 43.5, gy: 12.0 },
-  { gx: 42.0, gy: 22.0 },
-];
 
 function shadeHex(hex: string, percent: number): string {
   const clean = hex.replace("#", "");
@@ -98,6 +89,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   avatar,
   sectors,
   members,
+  decorItems,
+  placingDecorKind,
+  onPlaceDecorAt,
   groundSize,
   selectedSector,
   selectedMember,
@@ -187,6 +181,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const clampedX = Math.max(0.8, Math.min(gridCols - 1.2, gx));
     const clampedY = Math.max(0.8, Math.min(gridRows - 1.2, gy));
 
+    if (placingDecorKind) {
+      onPlaceDecorAt(Number(clampedX.toFixed(2)), Number(clampedY.toFixed(2)));
+      return;
+    }
+
     targetPos.current = resolveCollision(
       clampedX,
       clampedY,
@@ -235,7 +234,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Monitor screen
     ctx.fillStyle = "#1e293b";
     ctx.fillRect(x + w * 0.25, y + 3, w * 0.5, 8);
     ctx.fillStyle = accent;
@@ -243,34 +241,145 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     ctx.lineWidth = 1;
   };
 
-  const drawPineTree = (
+  const drawDecorProp = (
     ctx: CanvasRenderingContext2D,
+    kind: DecorKind,
     px: number,
     py: number,
     sway: number
   ) => {
     ctx.fillStyle = "rgba(15, 23, 42, 0.2)";
     ctx.beginPath();
-    ctx.ellipse(px, py + 10, 11, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py + 9, 10, 4.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#78350f";
-    ctx.fillRect(px - 3, py + 2, 6, 8);
+    if (kind === "pine_tree") {
+      ctx.fillStyle = "#78350f";
+      ctx.fillRect(px - 3, py + 2, 6, 8);
+      const tiers = [
+        { y: py + 3, r: 13, color: "#15803d" },
+        { y: py - 5, r: 10.5, color: "#16a34a" },
+        { y: py - 12, r: 7.5, color: "#22c55e" },
+      ];
+      tiers.forEach((t) => {
+        ctx.fillStyle = t.color;
+        ctx.beginPath();
+        ctx.moveTo(px + sway, t.y - t.r);
+        ctx.lineTo(px - t.r, t.y + t.r * 0.55);
+        ctx.lineTo(px + t.r, t.y + t.r * 0.55);
+        ctx.closePath();
+        ctx.fill();
+      });
+      return;
+    }
 
-    const tiers = [
-      { y: py + 3, r: 13, color: "#15803d" },
-      { y: py - 5, r: 10.5, color: "#16a34a" },
-      { y: py - 12, r: 7.5, color: "#22c55e" },
-    ];
-    tiers.forEach((t) => {
-      ctx.fillStyle = t.color;
+    if (kind === "palm_tree") {
+      const topX = px + sway * 1.4;
+      const topY = py - 24;
+      ctx.strokeStyle = "#854d0e";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(px + sway, t.y - t.r);
-      ctx.lineTo(px - t.r, t.y + t.r * 0.55);
-      ctx.lineTo(px + t.r, t.y + t.r * 0.55);
-      ctx.closePath();
+      ctx.moveTo(px, py + 6);
+      ctx.quadraticCurveTo(px + sway * 0.5, py - 10, topX, topY);
+      ctx.stroke();
+
+      const fronds = [-2.5, -1.6, -0.7, 0.2, 1.0, 2.2];
+      fronds.forEach((ang, i) => {
+        ctx.strokeStyle = i % 2 === 0 ? "#16a34a" : "#4ade80";
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.moveTo(topX, topY);
+        ctx.quadraticCurveTo(
+          topX + Math.cos(ang) * 9,
+          topY + Math.sin(ang) * 6 - 4,
+          topX + Math.cos(ang) * 16,
+          topY + Math.sin(ang) * 9 + 3
+        );
+        ctx.stroke();
+      });
+      ctx.lineWidth = 1;
+      return;
+    }
+
+    if (kind === "bench") {
+      ctx.fillStyle = "#b45309";
+      ctx.beginPath();
+      ctx.roundRect(px - 12, py - 4, 24, 9, 2);
       ctx.fill();
-    });
+      ctx.fillStyle = "#92400e";
+      ctx.fillRect(px - 12, py - 9, 24, 4);
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(px - 9, py + 5, 3, 4);
+      ctx.fillRect(px + 6, py + 5, 3, 4);
+      return;
+    }
+
+    if (kind === "lamp") {
+      ctx.strokeStyle = "#475569";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(px, py + 7);
+      ctx.lineTo(px, py - 18);
+      ctx.stroke();
+      ctx.fillStyle = "#fde047";
+      ctx.beginPath();
+      ctx.arc(px, py - 20, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      return;
+    }
+
+    if (kind === "planter") {
+      ctx.fillStyle = "#c2410c";
+      ctx.beginPath();
+      ctx.roundRect(px - 10, py - 3, 20, 10, 2);
+      ctx.fill();
+      ctx.fillStyle = "#22c55e";
+      ctx.beginPath();
+      ctx.arc(px - 4, py - 6, 5, 0, Math.PI * 2);
+      ctx.arc(px + 4, py - 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f43f5e";
+      ctx.beginPath();
+      ctx.arc(px, py - 8, 3, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    if (kind === "fountain") {
+      ctx.fillStyle = "#94a3b8";
+      ctx.beginPath();
+      ctx.ellipse(px, py + 2, 15, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#38bdf8";
+      ctx.beginPath();
+      ctx.ellipse(px, py + 2, 11, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillRect(px - 3, py - 9, 6, 10);
+      ctx.fillStyle = "#bae6fd";
+      ctx.beginPath();
+      ctx.arc(px, py - 11, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    // umbrella
+    ctx.strokeStyle = "#64748b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px, py + 7);
+    ctx.lineTo(px, py - 13);
+    ctx.stroke();
+    ctx.fillStyle = "#ec4899";
+    ctx.beginPath();
+    ctx.arc(px, py - 13, 12, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.stroke();
   };
 
   useEffect(() => {
@@ -389,7 +498,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       const campusCols = gridCols - 6;
       const campusRows = gridRows - 2;
 
-      // Exterior grass tiles around campus
       for (let r = 0; r < gridRows; r++) {
         for (let c = 0; c < gridCols; c++) {
           const x = originX + c * TILE_SIZE;
@@ -409,7 +517,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       }
 
-      // Campus outer walls & zone bays (Team Settlement, dApp Stores, Creators Corner)
       const cx0 = originX + TILE_SIZE;
       const cy0 = originY + TILE_SIZE;
       const cw = (campusCols - 1) * TILE_SIZE;
@@ -420,7 +527,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.strokeRect(cx0, cy0, cw, ch);
       ctx.lineWidth = 1;
 
-      // Team Member Settlement Bays (Top & Left Rooms)
       const teamRooms = [
         { gx: 2, gy: 2, gw: 8, gh: 6, floor: "#e0e7ff", label: "TEAM SETTLEMENT" },
         { gx: 12, gy: 2, gw: 9, gh: 6, floor: "#f1f5f9", label: "BUILDER LOUNGE" },
@@ -451,7 +557,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillText(rm.label, rx + 8, ry + 12);
       });
 
-      // Creators Corner Zone (Right Wing)
       const ccX = originX + 23 * TILE_SIZE;
       const ccY = originY + 2 * TILE_SIZE;
       const ccW = 7 * TILE_SIZE;
@@ -472,7 +577,17 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         drawDeskSet(ctx, ccX + ccW - 76, ccY + 140, 52, 20, "#f43f5e");
       }
 
-      // dApp Stores (Bottom Storefront Row)
+      // Trees & Decoration Items
+      const sway = Math.sin(walkPhase.current * 0.6) * 1.5;
+      decorItems
+        .filter((d) => d.x < gridCols && d.y < gridRows)
+        .forEach((d) => {
+          const px = originX + d.x * TILE_SIZE;
+          const py = originY + d.y * TILE_SIZE;
+          drawDecorProp(ctx, d.kind, px, py, sway);
+        });
+
+      // dApp Stores
       sectors.forEach((sec) => {
         const sx = originX + sec.x * TILE_SIZE;
         const sy = originY + sec.y * TILE_SIZE;
@@ -488,11 +603,9 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.strokeRect(sx, sy, sw, sh);
         ctx.lineWidth = 1;
 
-        // Storefront counter bar
         ctx.fillStyle = sec.color;
         ctx.fillRect(sx + 6, sy + sh - 16, sw - 12, 10);
 
-        // Logo badge & store name
         const badgeX = sx + sw / 2;
         const badgeY = sy + 20;
         ctx.beginPath();
@@ -547,13 +660,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       });
 
-      // Pine trees around exterior
-      const sway = Math.sin(walkPhase.current * 0.6) * 1.5;
-      PINE_TREES.filter((t) => t.gx < gridCols && t.gy < gridRows).forEach((t) => {
-        drawPineTree(ctx, originX + t.gx * TILE_SIZE, originY + t.gy * TILE_SIZE, sway);
-      });
-
-      // Settled Team Members & Creators (stationary with clean ● Name pill)
+      // Settled Team Members & Creators
       members.forEach((m, index) => {
         const px = originX + m.x * TILE_SIZE;
         const py = originY + m.y * TILE_SIZE;
@@ -594,7 +701,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           ctx.fillRect(px - 4, headY - 1.5, 8, 3);
         }
 
-        // Gather-style pill tag above settled member/creator
         const tagText = `● ${m.name}`;
         ctx.font = "bold 10px system-ui, sans-serif";
         const tagW = ctx.measureText(tagText).width + 12;
@@ -677,7 +783,17 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [avatar, sectors, members, groundSize, gridCols, gridRows, selectedSector, selectedMember]);
+  }, [
+    avatar,
+    sectors,
+    members,
+    decorItems,
+    groundSize,
+    gridCols,
+    gridRows,
+    selectedSector,
+    selectedMember,
+  ]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -685,7 +801,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ref={canvasRef}
         onClick={handleCanvasClick}
         onWheel={handleWheel}
-        style={{ width: "100%", height: "100%", display: "block", cursor: "pointer" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "block",
+          cursor: placingDecorKind ? "crosshair" : "pointer",
+        }}
       />
 
       <div
@@ -769,7 +890,15 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           color: "#e2e8f0",
         }}
       >
-        Team Rooms • dApp Stores • Creators Corner ({groundSize.toUpperCase()})
+        {placingDecorKind ? (
+          <span style={{ color: "#facc15", fontWeight: 700 }}>
+            Click anywhere on the map to place {placingDecorKind.replace("_", " ")}
+          </span>
+        ) : (
+          <span>
+            Team Rooms • dApp Stores • Creators Corner ({groundSize.toUpperCase()})
+          </span>
+        )}
         {nearbySector && (
           <span style={{ marginLeft: 10, color: "#38bdf8" }}>
             Near: <b>{nearbySector.name}</b>
