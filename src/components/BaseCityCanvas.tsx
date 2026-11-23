@@ -31,6 +31,24 @@ interface BaseCityCanvasProps {
   onOpenMarketCorner?: () => void;
 }
 
+interface RoomBox {
+  id: string;
+  gx: number;
+  gy: number;
+  gw: number;
+  gh: number;
+  floor: string;
+  wallTop: string;
+  wallSide: string;
+  borderColor: string;
+  labelColor: string;
+  label: string;
+  doorSide: "south" | "north" | "west" | "east";
+  doorSpan: number; // in grid tiles
+  deskAccentA: string;
+  deskAccentB: string;
+}
+
 const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
   compact: { cols: 30, rows: 20 },
   standard: { cols: 38, rows: 24 },
@@ -38,9 +56,163 @@ const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
 };
 
 const TILE_SIZE = 32;
+const WALL_THICK = 0.28; // grid units
+const WALL_3D_HEIGHT = 12; // px extrusion for 3D-style front walls
 const STORE_MARGIN = 0.45;
 const MIN_ZOOM = 0.65;
 const MAX_ZOOM = 2.8;
+
+const ROOMS: RoomBox[] = [
+  {
+    id: "team-settlement",
+    gx: 2,
+    gy: 2,
+    gw: 8,
+    gh: 6,
+    floor: "#e0e7ff",
+    wallTop: "#a5b4fc",
+    wallSide: "#6366f1",
+    borderColor: "#4f46e5",
+    labelColor: "#312e81",
+    label: "BASE TEAM SETTLEMENT",
+    doorSide: "south",
+    doorSpan: 2,
+    deskAccentA: "#3b82f6",
+    deskAccentB: "#6366f1",
+  },
+  {
+    id: "builder-lounge",
+    gx: 12,
+    gy: 2,
+    gw: 9,
+    gh: 6,
+    floor: "#f1f5f9",
+    wallTop: "#cbd5e1",
+    wallSide: "#64748b",
+    borderColor: "#475569",
+    labelColor: "#1e293b",
+    label: "BASE BUILDER LOUNGE",
+    doorSide: "south",
+    doorSpan: 2,
+    deskAccentA: "#0052FF",
+    deskAccentB: "#0ea5e9",
+  },
+  {
+    id: "ops-squad",
+    gx: 2,
+    gy: 10,
+    gw: 8,
+    gh: 6,
+    floor: "#fef3c7",
+    wallTop: "#fcd34d",
+    wallSide: "#d97706",
+    borderColor: "#b45309",
+    labelColor: "#78350f",
+    label: "TEAM OPS & SQUAD",
+    doorSide: "east",
+    doorSpan: 2,
+    deskAccentA: "#f59e0b",
+    deskAccentB: "#ea580c",
+  },
+  {
+    id: "core-builder-hub",
+    gx: 12,
+    gy: 10,
+    gw: 9,
+    gh: 6,
+    floor: "#e0f2fe",
+    wallTop: "#7dd3fc",
+    wallSide: "#0284c7",
+    borderColor: "#0369a1",
+    labelColor: "#0c4a6e",
+    label: "BUILDER SHIP ROOM",
+    doorSide: "west",
+    doorSpan: 2,
+    deskAccentA: "#0052FF",
+    deskAccentB: "#10b981",
+  },
+  {
+    id: "creators-corner",
+    gx: 23,
+    gy: 2,
+    gw: 7,
+    gh: 14,
+    floor: "#fce7f3",
+    wallTop: "#f9a8d4",
+    wallSide: "#db2777",
+    borderColor: "#be185d",
+    labelColor: "#831843",
+    label: "CREATORS CORNER",
+    doorSide: "west",
+    doorSpan: 2.2,
+    deskAccentA: "#ec4899",
+    deskAccentB: "#f43f5e",
+  },
+];
+
+function getDoorRange(room: RoomBox) {
+  if (room.doorSide === "south" || room.doorSide === "north") {
+    const center = room.gx + room.gw / 2;
+    return {
+      start: center - room.doorSpan / 2,
+      end: center + room.doorSpan / 2,
+    };
+  }
+  const center = room.gy + room.gh / 2;
+  return {
+    start: center - room.doorSpan / 2,
+    end: center + room.doorSpan / 2,
+  };
+}
+
+function isInDoorway(gx: number, gy: number, room: RoomBox, pad = 0.25): boolean {
+  const door = getDoorRange(room);
+  if (room.doorSide === "south") {
+    return (
+      Math.abs(gy - (room.gy + room.gh)) <= WALL_THICK + pad &&
+      gx >= door.start - pad &&
+      gx <= door.end + pad
+    );
+  }
+  if (room.doorSide === "north") {
+    return (
+      Math.abs(gy - room.gy) <= WALL_THICK + pad &&
+      gx >= door.start - pad &&
+      gx <= door.end + pad
+    );
+  }
+  if (room.doorSide === "east") {
+    return (
+      Math.abs(gx - (room.gx + room.gw)) <= WALL_THICK + pad &&
+      gy >= door.start - pad &&
+      gy <= door.end + pad
+    );
+  }
+  return (
+    Math.abs(gx - room.gx) <= WALL_THICK + pad &&
+    gy >= door.start - pad &&
+    gy <= door.end + pad
+  );
+}
+
+function hitsRoomWall(gx: number, gy: number, room: RoomBox, radius = 0.35): boolean {
+  if (isInDoorway(gx, gy, room)) return false;
+
+  const insideBox =
+    gx > room.gx - radius &&
+    gx < room.gx + room.gw + radius &&
+    gy > room.gy - radius &&
+    gy < room.gy + room.gh + radius;
+
+  if (!insideBox) return false;
+
+  const nearNorth = Math.abs(gy - room.gy) < WALL_THICK + radius;
+  const nearSouth = Math.abs(gy - (room.gy + room.gh)) < WALL_THICK + radius;
+  const nearWest = Math.abs(gx - room.gx) < WALL_THICK + radius;
+  const nearEast = Math.abs(gx - (room.gx + room.gw)) < WALL_THICK + radius;
+
+  return nearNorth || nearSouth || nearWest || nearEast;
+}
 
 function shadeHex(hex: string, percent: number): string {
   const clean = hex.replace("#", "");
@@ -94,6 +266,21 @@ function resolveCollision(
     }
   }
 
+  for (const room of ROOMS) {
+    if (hitsRoomWall(outX, outY, room)) {
+      const canMoveX = !hitsRoomWall(outX, prevY, room);
+      const canMoveY = !hitsRoomWall(prevX, outY, room);
+      if (canMoveX && !canMoveY) {
+        outY = prevY;
+      } else if (canMoveY && !canMoveX) {
+        outX = prevX;
+      } else {
+        outX = prevX;
+        outY = prevY;
+      }
+    }
+  }
+
   return { gx: outX, gy: outY };
 }
 
@@ -114,7 +301,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 }) => {
   const { cols: gridCols, rows: gridRows } = GROUND_DIMS[groundSize];
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const playerPos = useRef({ gx: 14.0, gy: 11.5 });
+  const playerPos = useRef({ gx: 14.0, gy: 9.0 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const camOffset = useRef({ x: 0, y: 0 });
   const zoomRef = useRef(1.1);
@@ -200,8 +387,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       return;
     }
 
-    // Check click inside the TVL & Market Corner room (gx: 2..10, gy: 17..20)
-    if (clampedX >= 2 && clampedX <= 10 && clampedY >= 17 && clampedY <= 20) {
+    if (clampedX >= 2 && clampedX <= 10.5 && clampedY >= 17 && clampedY <= 20.2) {
       onOpenMarketCorner?.();
     }
 
@@ -258,6 +444,134 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     ctx.fillStyle = accent;
     ctx.fillRect(x + w * 0.28, y + 4.5, w * 0.44, 5);
     ctx.lineWidth = 1;
+  };
+
+  // Draws a 3D-extruded wall segment with top cap + front/side depth face
+  const drawWallSegment3D = (
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    py: number,
+    pw: number,
+    ph: number,
+    topColor: string,
+    sideColor: string,
+    hasFrontFace: boolean
+  ) => {
+    if (hasFrontFace) {
+      ctx.fillStyle = sideColor;
+      ctx.fillRect(px, py + ph - 2, pw, WALL_3D_HEIGHT);
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.35)";
+      ctx.strokeRect(px, py + ph - 2, pw, WALL_3D_HEIGHT);
+    }
+    ctx.fillStyle = topColor;
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.25)";
+    ctx.strokeRect(px, py, pw, ph);
+  };
+
+  const drawRoomWith3DBoundaryAndDoor = (
+    ctx: CanvasRenderingContext2D,
+    room: RoomBox,
+    originX: number,
+    originY: number
+  ) => {
+    const rx = originX + room.gx * TILE_SIZE;
+    const ry = originY + room.gy * TILE_SIZE;
+    const rw = room.gw * TILE_SIZE;
+    const rh = room.gh * TILE_SIZE;
+    const wt = WALL_THICK * TILE_SIZE;
+
+    // Room floor
+    ctx.fillStyle = room.floor;
+    ctx.fillRect(rx, ry, rw, rh);
+
+    // Desks inside room
+    drawDeskSet(ctx, rx + 18, ry + 22, 44, 18, room.deskAccentA);
+    if (room.gh >= 10) {
+      drawDeskSet(ctx, rx + rw - 64, ry + 150, 44, 18, room.deskAccentB);
+    } else {
+      drawDeskSet(ctx, rx + rw - 64, ry + 22, 44, 18, room.deskAccentB);
+    }
+
+    // Room label
+    ctx.font = "bold 9px system-ui, sans-serif";
+    ctx.fillStyle = room.labelColor;
+    ctx.textAlign = "left";
+    ctx.fillText(room.label, rx + 10, ry + 13);
+
+    const door = getDoorRange(room);
+    const dStartPx = originX + door.start * TILE_SIZE;
+    const dEndPx = originX + door.end * TILE_SIZE;
+
+    // Doorway threshold mat & door jamb posts
+    ctx.fillStyle = "#fde68a";
+    if (room.doorSide === "south") {
+      ctx.fillRect(dStartPx, ry + rh - wt, dEndPx - dStartPx, wt * 2);
+      // Left & right south wall segments around doorway
+      drawWallSegment3D(
+        ctx,
+        rx - wt,
+        ry + rh - wt,
+        Math.max(0, dStartPx - (rx - wt)),
+        wt,
+        room.wallTop,
+        room.wallSide,
+        true
+      );
+      drawWallSegment3D(
+        ctx,
+        dEndPx,
+        ry + rh - wt,
+        Math.max(0, rx + rw + wt - dEndPx),
+        wt,
+        room.wallTop,
+        room.wallSide,
+        true
+      );
+    } else {
+      drawWallSegment3D(ctx, rx - wt, ry + rh - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, true);
+    }
+
+    // North wall
+    drawWallSegment3D(ctx, rx - wt, ry - wt, rw + wt * 2, wt, room.wallTop, room.wallSide, false);
+
+    // West wall
+    if (room.doorSide === "west") {
+      const topSegH = Math.max(0, dStartPx - (ry - wt));
+      const botSegY = dEndPx;
+      const botSegH = Math.max(0, ry + rh + wt - botSegY);
+      ctx.fillStyle = "#fde68a";
+      ctx.fillRect(originX + room.gx * TILE_SIZE - wt, dStartPx, wt * 2, dEndPx - dStartPx);
+      drawWallSegment3D(ctx, rx - wt, ry - wt, wt, topSegH, room.wallTop, room.wallSide, false);
+      drawWallSegment3D(ctx, rx - wt, botSegY, wt, botSegH, room.wallTop, room.wallSide, true);
+    } else {
+      drawWallSegment3D(ctx, rx - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
+    }
+
+    // East wall
+    if (room.doorSide === "east") {
+      const topSegH = Math.max(0, dStartPx - (ry - wt));
+      const botSegY = dEndPx;
+      const botSegH = Math.max(0, ry + rh + wt - botSegY);
+      ctx.fillStyle = "#fde68a";
+      ctx.fillRect(originX + (room.gx + room.gw) * TILE_SIZE - wt, dStartPx, wt * 2, dEndPx - dStartPx);
+      drawWallSegment3D(ctx, rx + rw - wt, ry - wt, wt, topSegH, room.wallTop, room.wallSide, false);
+      drawWallSegment3D(ctx, rx + rw - wt, botSegY, wt, botSegH, room.wallTop, room.wallSide, true);
+    } else {
+      drawWallSegment3D(ctx, rx + rw - wt, ry - wt, wt, rh + wt * 2, room.wallTop, room.wallSide, true);
+    }
+
+    // Door label badge
+    ctx.font = "bold 8px system-ui, sans-serif";
+    ctx.fillStyle = room.borderColor;
+    ctx.textAlign = "center";
+    if (room.doorSide === "south") {
+      ctx.fillText("DOOR ↕", (dStartPx + dEndPx) / 2, ry + rh + WALL_3D_HEIGHT + 8);
+    } else if (room.doorSide === "east") {
+      ctx.fillText("DOOR ↔", rx + rw + 18, (dStartPx + dEndPx) / 2 + 3);
+    } else if (room.doorSide === "west") {
+      ctx.fillText("DOOR ↔", rx - 20, (dStartPx + dEndPx) / 2 + 3);
+    }
   };
 
   const drawDecorProp = (
@@ -545,57 +859,13 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.strokeRect(cx0, cy0, cw, ch);
       ctx.lineWidth = 1;
 
-      const teamRooms = [
-        { gx: 2, gy: 2, gw: 8, gh: 6, floor: "#e0e7ff", label: "TEAM SETTLEMENT" },
-        { gx: 12, gy: 2, gw: 9, gh: 6, floor: "#f1f5f9", label: "BUILDER LOUNGE" },
-        { gx: 2, gy: 10, gw: 8, gh: 6, floor: "#fef3c7", label: "OPS & SQUAD DESKS" },
-        { gx: 12, gy: 10, gw: 9, gh: 6, floor: "#e0f2fe", label: "CORE TEAM HUB" },
-      ];
-
-      teamRooms.forEach((rm) => {
-        if (rm.gx + rm.gw > campusCols || rm.gy + rm.gh > campusRows) return;
-        const rx = originX + rm.gx * TILE_SIZE;
-        const ry = originY + rm.gy * TILE_SIZE;
-        const rw = rm.gw * TILE_SIZE;
-        const rh = rm.gh * TILE_SIZE;
-
-        ctx.fillStyle = rm.floor;
-        ctx.fillRect(rx, ry, rw, rh);
-        ctx.strokeStyle = "#94a3b8";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(rx, ry, rw, rh);
-        ctx.lineWidth = 1;
-
-        drawDeskSet(ctx, rx + 16, ry + 18, 44, 18, "#3b82f6");
-        drawDeskSet(ctx, rx + rw - 64, ry + 18, 44, 18, "#8b5cf6");
-
-        ctx.font = "bold 9px system-ui, sans-serif";
-        ctx.fillStyle = "#475569";
-        ctx.textAlign = "left";
-        ctx.fillText(rm.label, rx + 8, ry + 12);
+      ROOMS.forEach((rm) => {
+        if (rm.gx + rm.gw <= campusCols && rm.gy + rm.gh <= campusRows) {
+          drawRoomWith3DBoundaryAndDoor(ctx, rm, originX, originY);
+        }
       });
 
-      const ccX = originX + 23 * TILE_SIZE;
-      const ccY = originY + 2 * TILE_SIZE;
-      const ccW = 7 * TILE_SIZE;
-      const ccH = 14 * TILE_SIZE;
-      if (23 + 7 <= campusCols && 2 + 14 <= campusRows) {
-        ctx.fillStyle = "#fce7f3";
-        ctx.fillRect(ccX, ccY, ccW, ccH);
-        ctx.strokeStyle = "#ec4899";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(ccX, ccY, ccW, ccH);
-        ctx.lineWidth = 1;
-
-        ctx.font = "bold 10px system-ui, sans-serif";
-        ctx.fillStyle = "#be185d";
-        ctx.textAlign = "center";
-        ctx.fillText("CREATORS CORNER", ccX + ccW / 2, ccY + 14);
-        drawDeskSet(ctx, ccX + 22, ccY + 34, 52, 20, "#ec4899");
-        drawDeskSet(ctx, ccX + ccW - 76, ccY + 140, 52, 20, "#f43f5e");
-      }
-
-      // Base TVL & Market Status Corner Board (Bottom-Left Campus Corner)
+      // Base TVL & Market Status Corner Board
       const tvlX = originX + 2 * TILE_SIZE;
       const tvlY = originY + 17 * TILE_SIZE;
       const tvlW = 8.5 * TILE_SIZE;
@@ -960,8 +1230,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           </span>
         ) : (
           <span>
-            Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b> ({marketSnapshot.tvlChange24h}) •{" "}
-            <b style={{ color: "#22c55e" }}>{marketSnapshot.marketStatus}</b>
+            3D Room Walls + Doors • Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b>
           </span>
         )}
         {nearbySector && (
