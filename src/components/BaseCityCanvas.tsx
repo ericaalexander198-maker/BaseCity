@@ -2,22 +2,29 @@ import React, { useEffect, useRef, useState } from "react";
 import { CityMember, CitySector } from "../data/sectors";
 import { AvatarConfig } from "./AvatarCustomizer";
 
+export type CityGroundSize = "compact" | "standard" | "mega";
+
 interface BaseCityCanvasProps {
   avatar: AvatarConfig;
   sectors: CitySector[];
   members: CityMember[];
+  groundSize: CityGroundSize;
   selectedSector: CitySector | null;
   selectedMember: CityMember | null;
   onSelectSector: (sector: CitySector | null) => void;
   onSelectMember: (member: CityMember | null) => void;
 }
 
-const GRID_COLS = 32;
-const GRID_ROWS = 24;
+const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
+  compact: { cols: 26, rows: 20 },
+  standard: { cols: 32, rows: 24 },
+  mega: { cols: 42, rows: 32 },
+};
+
 const TILE_W = 48;
 const TILE_H = 24;
 const STORE_MARGIN = 0.45;
-const MIN_ZOOM = 0.65;
+const MIN_ZOOM = 0.55;
 const MAX_ZOOM = 2.8;
 
 const PALM_SPOTS = [
@@ -25,12 +32,15 @@ const PALM_SPOTS = [
   { x: 11.5, y: 1.4 },
   { x: 21.5, y: 1.5 },
   { x: 28.5, y: 2.2 },
+  { x: 35.5, y: 2.0 },
   { x: 2.2, y: 11.5 },
   { x: 14.0, y: 11.2 },
   { x: 24.5, y: 11.5 },
+  { x: 34.0, y: 12.0 },
   { x: 3.5, y: 17.5 },
   { x: 16.5, y: 17.8 },
   { x: 27.5, y: 17.5 },
+  { x: 37.0, y: 22.0 },
 ];
 
 const LAMP_SPOTS = [
@@ -38,6 +48,7 @@ const LAMP_SPOTS = [
   { x: 13.5, y: 13.2 },
   { x: 20.5, y: 13.2 },
   { x: 26.5, y: 13.2 },
+  { x: 33.5, y: 13.2 },
 ];
 
 function gridToIso(gx: number, gy: number, originX: number, originY: number) {
@@ -71,10 +82,12 @@ function resolveStoreCollision(
   gy: number,
   prevX: number,
   prevY: number,
-  sectors: CitySector[]
+  sectors: CitySector[],
+  cols: number,
+  rows: number
 ) {
-  let outX = Math.max(0.6, Math.min(GRID_COLS - 1.2, gx));
-  let outY = Math.max(0.6, Math.min(GRID_ROWS - 1.2, gy));
+  let outX = Math.max(0.6, Math.min(cols - 1.2, gx));
+  let outY = Math.max(0.6, Math.min(rows - 1.2, gy));
 
   for (const s of sectors) {
     const minX = s.x - STORE_MARGIN;
@@ -112,17 +125,19 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   avatar,
   sectors,
   members,
+  groundSize,
   selectedSector,
   selectedMember,
   onSelectSector,
   onSelectMember,
 }) => {
+  const { cols: gridCols, rows: gridRows } = GROUND_DIMS[groundSize];
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const playerPos = useRef({ gx: 15.5, gy: 11.5 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const camOffset = useRef({ x: 0, y: 0 });
-  const zoomRef = useRef(1.15);
-  const [zoomDisplay, setZoomDisplay] = useState(115);
+  const zoomRef = useRef(1.1);
+  const [zoomDisplay, setZoomDisplay] = useState(110);
   const keysPressed = useRef<Record<string, boolean>>({});
   const walkPhase = useRef(0);
   const logoCache = useRef<Record<string, HTMLImageElement>>({});
@@ -172,7 +187,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     originY: 68 + camOffset.current.y,
   });
 
-  // Convert screen click coordinates back through zoom transform into world coordinates
   const screenToWorld = (sx: number, sy: number, cssW: number, cssH: number) => {
     const z = zoomRef.current;
     const cx = cssW / 2;
@@ -193,15 +207,17 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const { originX, originY } = getMapOrigin(rect.width);
 
     const { gx, gy } = isoToGrid(wx, wy, originX, originY);
-    const clampedX = Math.max(0.6, Math.min(GRID_COLS - 1.2, gx));
-    const clampedY = Math.max(0.6, Math.min(GRID_ROWS - 1.2, gy));
+    const clampedX = Math.max(0.6, Math.min(gridCols - 1.2, gx));
+    const clampedY = Math.max(0.6, Math.min(gridRows - 1.2, gy));
 
     targetPos.current = resolveStoreCollision(
       clampedX,
       clampedY,
       playerPos.current.gx,
       playerPos.current.gy,
-      sectors
+      sectors,
+      gridCols,
+      gridRows
     );
 
     const clickedMember = members.find(
@@ -300,7 +316,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
       const cssW = canvas.clientWidth || 900;
       const cssH = canvas.clientHeight || 560;
-      // Full uncapped devicePixelRatio so browser zoom + canvas zoom stay 100% razor-sharp
       const dpr = window.devicePixelRatio || 1;
       const targetW = Math.round(cssW * dpr);
       const targetH = Math.round(cssH * dpr);
@@ -325,11 +340,21 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       if (keysPressed.current["a"] || keysPressed.current["arrowleft"]) dx -= speed;
       if (keysPressed.current["d"] || keysPressed.current["arrowright"]) dx += speed;
 
-      const prevX = playerPos.current.gx;
-      const prevY = playerPos.current.gy;
+      const prevX = Math.max(0.6, Math.min(gridCols - 1.2, playerPos.current.gx));
+      const prevY = Math.max(0.6, Math.min(gridRows - 1.2, playerPos.current.gy));
+      playerPos.current.gx = prevX;
+      playerPos.current.gy = prevY;
 
       if (dx !== 0 || dy !== 0) {
-        const resolved = resolveStoreCollision(prevX + dx, prevY + dy, prevX, prevY, sectors);
+        const resolved = resolveStoreCollision(
+          prevX + dx,
+          prevY + dy,
+          prevX,
+          prevY,
+          sectors,
+          gridCols,
+          gridRows
+        );
         playerPos.current.gx = resolved.gx;
         playerPos.current.gy = resolved.gy;
         isMoving = Math.hypot(resolved.gx - prevX, resolved.gy - prevY) > 0.005;
@@ -340,7 +365,15 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         if (dist > 0.08) {
           const stepX = prevX + (diffX / dist) * speed;
           const stepY = prevY + (diffY / dist) * speed;
-          const resolved = resolveStoreCollision(stepX, stepY, prevX, prevY, sectors);
+          const resolved = resolveStoreCollision(
+            stepX,
+            stepY,
+            prevX,
+            prevY,
+            sectors,
+            gridCols,
+            gridRows
+          );
           if (Math.hypot(resolved.gx - prevX, resolved.gy - prevY) > 0.005) {
             playerPos.current.gx = resolved.gx;
             playerPos.current.gy = resolved.gy;
@@ -360,8 +393,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       }
 
       const pIsoPreview = gridToIso(playerPos.current.gx, playerPos.current.gy, cssW / 2, 68);
-      const desiredCamX = Math.max(-280, Math.min(280, cssW / 2 - pIsoPreview.x));
-      const desiredCamY = Math.max(-160, Math.min(140, cssH * 0.52 - pIsoPreview.y));
+      const panLimitX = groundSize === "mega" ? 440 : groundSize === "compact" ? 180 : 280;
+      const panLimitY = groundSize === "mega" ? 260 : groundSize === "compact" ? 110 : 160;
+      const desiredCamX = Math.max(-panLimitX, Math.min(panLimitX, cssW / 2 - pIsoPreview.x));
+      const desiredCamY = Math.max(-panLimitY, Math.min(panLimitY, cssH * 0.52 - pIsoPreview.y));
       camOffset.current.x += (desiredCamX - camOffset.current.x) * 0.08;
       camOffset.current.y += (desiredCamY - camOffset.current.y) * 0.08;
 
@@ -376,7 +411,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
       ctx.clearRect(0, 0, cssW, cssH);
 
-      // Background sky fills full viewport cleanly
       const skyGrad = ctx.createLinearGradient(0, 0, 0, cssH);
       skyGrad.addColorStop(0, "#311042");
       skyGrad.addColorStop(0.35, "#7e22ce");
@@ -385,7 +419,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, cssW, cssH);
 
-      // Apply Crisp Vector Zoom around viewport center
       const z = zoomRef.current;
       ctx.translate(cssW / 2, cssH / 2);
       ctx.scale(z, z);
@@ -393,23 +426,34 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
       const { originX, originY } = getMapOrigin(cssW);
 
-      for (let r = 0; r < GRID_ROWS; r++) {
-        for (let c = 0; c < GRID_COLS; c++) {
+      const roadRowStart = Math.floor(gridRows * 0.58);
+      const beachRowStart = roadRowStart + 2;
+      const oceanRowStart = beachRowStart + 4;
+      const crossColA = Math.floor(gridCols * 0.48);
+      const crossColB = crossColA + 1;
+
+      for (let r = 0; r < gridRows; r++) {
+        for (let c = 0; c < gridCols; c++) {
           const p0 = gridToIso(c, r, originX, originY);
           const p1 = gridToIso(c + 1, r, originX, originY);
           const p2 = gridToIso(c + 1, r + 1, originX, originY);
           const p3 = gridToIso(c, r + 1, originX, originY);
 
           let tileFill = (r + c) % 2 === 0 ? "#cbd5e1" : "#94a3b8";
-          if (r >= 14 && r <= 15) {
+          if (r >= roadRowStart && r < beachRowStart) {
             tileFill = "#1e293b";
-          } else if (r >= 16 && r <= 19) {
+          } else if (r >= beachRowStart && r < oceanRowStart) {
             tileFill = (r + c) % 2 === 0 ? "#fde68a" : "#fcd34d";
-          } else if (r >= 20) {
+          } else if (r >= oceanRowStart) {
             tileFill = (r + c) % 2 === 0 ? "#06b6d4" : "#0284c7";
-          } else if (c === 15 || c === 16) {
+          } else if (c === crossColA || c === crossColB) {
             tileFill = "#1e293b";
-          } else if (r >= 6 && r <= 11 && c >= 10 && c <= 21) {
+          } else if (
+            r >= 5 &&
+            r <= roadRowStart - 2 &&
+            c >= crossColA - 5 &&
+            c <= crossColB + 5
+          ) {
             tileFill = (r + c) % 2 === 0 ? "#86efac" : "#4ade80";
           }
 
@@ -428,7 +472,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       }
       ctx.lineWidth = 1;
 
-      LAMP_SPOTS.forEach((lp) => {
+      LAMP_SPOTS.filter((lp) => lp.x < gridCols - 1 && lp.y < gridRows - 1).forEach((lp) => {
         const pos = gridToIso(lp.x, lp.y, originX, originY);
         ctx.strokeStyle = "#f8fafc";
         ctx.lineWidth = 2;
@@ -443,8 +487,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.lineWidth = 1;
       });
 
-      const netA = gridToIso(11, 17.5, originX, originY);
-      const netB = gridToIso(15, 17.5, originX, originY);
+      const netA = gridToIso(crossColA - 4, beachRowStart + 1.5, originX, originY);
+      const netB = gridToIso(crossColA, beachRowStart + 1.5, originX, originY);
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -457,12 +501,15 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.stroke();
       ctx.lineWidth = 1;
 
-      const carOffset = ((walkPhase.current * 14) % 24) + 3;
-      drawCar(ctx, carOffset, 14.4, originX, originY, "#f43f5e");
-      drawCar(ctx, 28 - (carOffset % 22), 15.3, originX, originY, "#facc15");
+      const carSpan = Math.max(14, gridCols - 8);
+      const carOffset = ((walkPhase.current * 14) % carSpan) + 3;
+      drawCar(ctx, carOffset, roadRowStart + 0.4, originX, originY, "#f43f5e");
+      drawCar(ctx, gridCols - 4 - (carOffset % (carSpan - 2)), roadRowStart + 1.3, originX, originY, "#facc15");
 
       const sway = Math.sin(walkPhase.current * 0.6) * 2.5;
-      PALM_SPOTS.forEach((pt) => drawPalmTree(ctx, pt.x, pt.y, originX, originY, sway));
+      PALM_SPOTS.filter((pt) => pt.x < gridCols - 1 && pt.y < gridRows - 1).forEach((pt) =>
+        drawPalmTree(ctx, pt.x, pt.y, originX, originY, sway)
+      );
 
       // HD Textured Stores / Landmarks
       sectors.forEach((sec) => {
@@ -762,7 +809,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [avatar, sectors, members, selectedSector, selectedMember]);
+  }, [avatar, sectors, members, groundSize, gridCols, gridRows, selectedSector, selectedMember]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -770,3 +817,97 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ref={canvasRef}
         onClick={handleCanvasClick}
         onWheel={handleWheel}
+        style={{ width: "100%", height: "100%", display: "block", cursor: "pointer" }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          right: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          background: "rgba(15, 23, 42, 0.9)",
+          border: "1px solid rgba(148, 163, 184, 0.25)",
+          borderRadius: 10,
+          padding: "6px 10px",
+          fontSize: 12,
+          color: "#f8fafc",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setZoom(zoomRef.current - 0.2)}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            border: "1px solid #334155",
+            background: "#1e293b",
+            color: "#fff",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          −
+        </button>
+        <span style={{ minWidth: 42, textAlign: "center", fontWeight: 600 }}>
+          {zoomDisplay}%
+        </span>
+        <button
+          type="button"
+          onClick={() => setZoom(zoomRef.current + 0.2)}
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 6,
+            border: "1px solid #334155",
+            background: "#1e293b",
+            color: "#fff",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => setZoom(1.0)}
+          style={{
+            padding: "3px 7px",
+            borderRadius: 6,
+            border: "1px solid #334155",
+            background: "#0f172a",
+            color: "#93c5fd",
+            fontSize: 11,
+            cursor: "pointer",
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          left: 12,
+          background: "rgba(15, 23, 42, 0.85)",
+          border: "1px solid rgba(148, 163, 184, 0.25)",
+          borderRadius: 10,
+          padding: "8px 12px",
+          fontSize: 12,
+          color: "#e2e8f0",
+        }}
+      >
+        Ground: <b>{groundSize.toUpperCase()} ({gridCols}×{gridRows})</b> • Use <b>Hide ✕</b> for full view
+        {nearbySector && (
+          <span style={{ marginLeft: 10, color: "#38bdf8" }}>
+            Near: <b>{nearbySector.name}</b>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
