@@ -5,6 +5,16 @@ import { CityDecorItem, DecorKind } from "./CityManagerTool";
 
 export type CityGroundSize = "compact" | "standard" | "mega";
 
+export interface BaseMarketSnapshot {
+  tvl: string;
+  tvlChange24h: string;
+  stablecoins: string;
+  dexVol24h: string;
+  activeAddresses24h: string;
+  marketStatus: "BULLISH" | "ACTIVE" | "CAUTIOUS";
+  updatedLabel: string;
+}
+
 interface BaseCityCanvasProps {
   avatar: AvatarConfig;
   sectors: CitySector[];
@@ -13,10 +23,12 @@ interface BaseCityCanvasProps {
   placingDecorKind: DecorKind | null;
   onPlaceDecorAt: (gx: number, gy: number) => void;
   groundSize: CityGroundSize;
+  marketSnapshot: BaseMarketSnapshot;
   selectedSector: CitySector | null;
   selectedMember: CityMember | null;
   onSelectSector: (sector: CitySector | null) => void;
   onSelectMember: (member: CityMember | null) => void;
+  onOpenMarketCorner?: () => void;
 }
 
 const GROUND_DIMS: Record<CityGroundSize, { cols: number; rows: number }> = {
@@ -93,10 +105,12 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   placingDecorKind,
   onPlaceDecorAt,
   groundSize,
+  marketSnapshot,
   selectedSector,
   selectedMember,
   onSelectSector,
   onSelectMember,
+  onOpenMarketCorner,
 }) => {
   const { cols: gridCols, rows: gridRows } = GROUND_DIMS[groundSize];
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -184,6 +198,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     if (placingDecorKind) {
       onPlaceDecorAt(Number(clampedX.toFixed(2)), Number(clampedY.toFixed(2)));
       return;
+    }
+
+    // Check click inside the TVL & Market Corner room (gx: 2..10, gy: 17..20)
+    if (clampedX >= 2 && clampedX <= 10 && clampedY >= 17 && clampedY <= 20) {
+      onOpenMarketCorner?.();
     }
 
     targetPos.current = resolveCollision(
@@ -365,7 +384,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       return;
     }
 
-    // umbrella
     ctx.strokeStyle = "#64748b";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -577,7 +595,55 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         drawDeskSet(ctx, ccX + ccW - 76, ccY + 140, 52, 20, "#f43f5e");
       }
 
-      // Trees & Decoration Items
+      // Base TVL & Market Status Corner Board (Bottom-Left Campus Corner)
+      const tvlX = originX + 2 * TILE_SIZE;
+      const tvlY = originY + 17 * TILE_SIZE;
+      const tvlW = 8.5 * TILE_SIZE;
+      const tvlH = 3.2 * TILE_SIZE;
+      if (2 + 8.5 <= campusCols && 17 + 3.2 <= campusRows) {
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(tvlX, tvlY, tvlW, tvlH);
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tvlX, tvlY, tvlW, tvlH);
+        ctx.lineWidth = 1;
+
+        ctx.font = "bold 9px system-ui, sans-serif";
+        ctx.fillStyle = "#38bdf8";
+        ctx.textAlign = "left";
+        ctx.fillText("BASE TVL & MARKET CORNER", tvlX + 10, tvlY + 14);
+
+        ctx.fillStyle =
+          marketSnapshot.marketStatus === "BULLISH"
+            ? "#22c55e"
+            : marketSnapshot.marketStatus === "ACTIVE"
+            ? "#38bdf8"
+            : "#facc15";
+        ctx.fillText(marketSnapshot.marketStatus, tvlX + tvlW - 62, tvlY + 14);
+
+        ctx.font = "bold 13px system-ui, sans-serif";
+        ctx.fillStyle = "#f8fafc";
+        ctx.fillText(
+          `TVL: ${marketSnapshot.tvl} (${marketSnapshot.tvlChange24h})`,
+          tvlX + 10,
+          tvlY + 35
+        );
+
+        ctx.font = "10px system-ui, sans-serif";
+        ctx.fillStyle = "#cbd5e1";
+        ctx.fillText(
+          `Stables: ${marketSnapshot.stablecoins} • 24h DEX: ${marketSnapshot.dexVol24h}`,
+          tvlX + 10,
+          tvlY + 53
+        );
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText(
+          `Active Addrs: ${marketSnapshot.activeAddresses24h} • ${marketSnapshot.updatedLabel}`,
+          tvlX + 10,
+          tvlY + 69
+        );
+      }
+
       const sway = Math.sin(walkPhase.current * 0.6) * 1.5;
       decorItems
         .filter((d) => d.x < gridCols && d.y < gridRows)
@@ -587,7 +653,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           drawDecorProp(ctx, d.kind, px, py, sway);
         });
 
-      // dApp Stores
       sectors.forEach((sec) => {
         const sx = originX + sec.x * TILE_SIZE;
         const sy = originY + sec.y * TILE_SIZE;
@@ -660,7 +725,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       });
 
-      // Settled Team Members & Creators
       members.forEach((m, index) => {
         const px = originX + m.x * TILE_SIZE;
         const py = originY + m.y * TILE_SIZE;
@@ -713,7 +777,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillText(tagText, px, headY - 10.5);
       });
 
-      // Player Avatar
       const pX = originX + playerPos.current.gx * TILE_SIZE;
       const pY = originY + playerPos.current.gy * TILE_SIZE;
       const wScale = avatar.bodyWidth;
@@ -789,6 +852,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     members,
     decorItems,
     groundSize,
+    marketSnapshot,
     gridCols,
     gridRows,
     selectedSector,
@@ -896,7 +960,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           </span>
         ) : (
           <span>
-            Team Rooms • dApp Stores • Creators Corner ({groundSize.toUpperCase()})
+            Base TVL: <b style={{ color: "#38bdf8" }}>{marketSnapshot.tvl}</b> ({marketSnapshot.tvlChange24h}) •{" "}
+            <b style={{ color: "#22c55e" }}>{marketSnapshot.marketStatus}</b>
           </span>
         )}
         {nearbySector && (
