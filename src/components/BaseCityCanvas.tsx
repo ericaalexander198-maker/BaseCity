@@ -45,6 +45,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   const playerPos = useRef({ gx: 8.5, gy: 7.5 });
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const keysPressed = useRef<Record<string, boolean>>({});
+  const walkPhase = useRef(0);
   const [nearbySector, setNearbySector] = useState<CitySector | null>(null);
 
   useEffect(() => {
@@ -114,6 +115,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       const speed = 0.08;
       let dx = 0;
       let dy = 0;
+      let isMoving = false;
+
       if (keysPressed.current["w"] || keysPressed.current["arrowup"]) dy -= speed;
       if (keysPressed.current["s"] || keysPressed.current["arrowdown"]) dy += speed;
       if (keysPressed.current["a"] || keysPressed.current["arrowleft"]) dx -= speed;
@@ -122,6 +125,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       if (dx !== 0 || dy !== 0) {
         playerPos.current.gx = Math.max(1, Math.min(GRID_COLS - 1.5, playerPos.current.gx + dx));
         playerPos.current.gy = Math.max(1, Math.min(GRID_ROWS - 1.5, playerPos.current.gy + dy));
+        isMoving = true;
       } else if (targetPos.current) {
         const diffX = targetPos.current.gx - playerPos.current.gx;
         const diffY = targetPos.current.gy - playerPos.current.gy;
@@ -129,9 +133,16 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         if (dist > 0.08) {
           playerPos.current.gx += (diffX / dist) * speed;
           playerPos.current.gy += (diffY / dist) * speed;
+          isMoving = true;
         } else {
           targetPos.current = null;
         }
+      }
+
+      if (isMoving) {
+        walkPhase.current += 0.22;
+      } else {
+        walkPhase.current += 0.04;
       }
 
       const foundNear =
@@ -218,7 +229,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           originY
         );
 
-        // Logo circle
         ctx.beginPath();
         ctx.arc(center.x, center.y - lift - 10, 11, 0, Math.PI * 2);
         ctx.fillStyle = sec.color;
@@ -238,8 +248,8 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillText(sec.name, center.x, center.y - lift + 10);
       });
 
-      // Draw Added Builders / Creators / Members
-      members.forEach((m) => {
+      // Draw Added Builders / Creators / Members with gentle arm animation
+      members.forEach((m, index) => {
         const mPos = gridToIso(m.x, m.y, originX, originY);
         const w = m.bodyWidth;
         const h = m.bodyHeight;
@@ -247,11 +257,32 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         const torsoH = 16 * h;
         const headR = 6.5;
         const isSelected = selectedMember?.id === m.id;
+        const armSwing = Math.sin(walkPhase.current + index * 1.4) * (isSelected ? 6 : 2.5);
 
         ctx.beginPath();
         ctx.ellipse(mPos.x, mPos.y + 2, 10 * w, 5, 0, 0, Math.PI * 2);
         ctx.fillStyle = isSelected ? "rgba(250,204,21,0.55)" : "rgba(0,0,0,0.35)";
         ctx.fill();
+
+        const shoulderY = mPos.y - 2 - torsoH + 3;
+        ctx.strokeStyle = m.skinTone;
+        ctx.lineWidth = Math.max(2.2, 2.8 * w);
+        ctx.lineCap = "round";
+
+        // Left arm
+        ctx.beginPath();
+        ctx.moveTo(mPos.x - torsoW / 2, shoulderY);
+        ctx.lineTo(mPos.x - torsoW / 2 - 4 * w, shoulderY + 7 + armSwing);
+        ctx.stroke();
+
+        // Right arm (waves slightly higher when selected)
+        ctx.beginPath();
+        ctx.moveTo(mPos.x + torsoW / 2, shoulderY);
+        ctx.lineTo(
+          mPos.x + torsoW / 2 + 4 * w,
+          isSelected ? shoulderY - 3 - Math.abs(armSwing) : shoulderY + 7 - armSwing
+        );
+        ctx.stroke();
 
         ctx.fillStyle = m.outfitColor;
         ctx.beginPath();
@@ -275,7 +306,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillText(`${m.name} (${m.role})`, mPos.x, headY - headR - 5);
       });
 
-      // Draw Player Avatar
+      // Draw Player Avatar with animated arms
       const pScreen = gridToIso(playerPos.current.gx, playerPos.current.gy, originX, originY);
       const wScale = avatar.bodyWidth;
       const hScale = avatar.bodyHeight;
@@ -283,25 +314,52 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       const torsoW = 14 * wScale;
       const torsoH = 18 * hScale;
 
+      const armAmp = isMoving ? 7.5 : 2.2;
+      const leftArmOffset = Math.sin(walkPhase.current) * armAmp;
+      const rightArmOffset = Math.sin(walkPhase.current + Math.PI) * armAmp;
+      const legOffset = isMoving ? Math.sin(walkPhase.current) * 3 : 0;
+
       ctx.beginPath();
       ctx.ellipse(pScreen.x, pScreen.y + 2, 11 * wScale, 5.5, 0, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fill();
 
+      // Legs
       ctx.strokeStyle = avatar.skinTone;
       ctx.lineWidth = 3 * wScale;
+      ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(pScreen.x - 4 * wScale, pScreen.y - 2);
-      ctx.lineTo(pScreen.x - 4 * wScale, pScreen.y + 5);
+      ctx.lineTo(pScreen.x - 4 * wScale, pScreen.y + 5 + legOffset);
       ctx.moveTo(pScreen.x + 4 * wScale, pScreen.y - 2);
-      ctx.lineTo(pScreen.x + 4 * wScale, pScreen.y + 5);
+      ctx.lineTo(pScreen.x + 4 * wScale, pScreen.y + 5 - legOffset);
       ctx.stroke();
 
+      // Torso
       ctx.fillStyle = avatar.outfitColor;
       ctx.beginPath();
       ctx.roundRect(pScreen.x - torsoW / 2, pScreen.y - 2 - torsoH, torsoW, torsoH, 5);
       ctx.fill();
 
+      // Animated Arms
+      const pShoulderY = pScreen.y - 2 - torsoH + 4;
+      ctx.strokeStyle = avatar.skinTone;
+      ctx.lineWidth = Math.max(2.5, 3.2 * wScale);
+      ctx.lineCap = "round";
+
+      // Left arm
+      ctx.beginPath();
+      ctx.moveTo(pScreen.x - torsoW / 2, pShoulderY);
+      ctx.lineTo(pScreen.x - torsoW / 2 - 5 * wScale, pShoulderY + 8 + leftArmOffset);
+      ctx.stroke();
+
+      // Right arm
+      ctx.beginPath();
+      ctx.moveTo(pScreen.x + torsoW / 2, pShoulderY);
+      ctx.lineTo(pScreen.x + torsoW / 2 + 5 * wScale, pShoulderY + 8 + rightArmOffset);
+      ctx.stroke();
+
+      // Head
       const headY = pScreen.y - 4 - torsoH - headR;
       ctx.beginPath();
       ctx.arc(pScreen.x, headY, headR, 0, Math.PI * 2);
