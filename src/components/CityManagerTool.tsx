@@ -17,6 +17,22 @@ const ZONES: CityZone[] = [
 
 const COLORS = ["#0052FF", "#7C3AED", "#EC4899", "#0891B2", "#10B981", "#F59E0B"];
 
+// Spacious preset stall slots so stalls never overlap each other
+const STALL_SLOTS = [
+  { x: 2, y: 2 },
+  { x: 8, y: 2 },
+  { x: 14, y: 2 },
+  { x: 5, y: 10 },
+  { x: 2, y: 6 },
+  { x: 14, y: 6 },
+  { x: 11, y: 10 },
+  { x: 16, y: 10 },
+  { x: 8, y: 6 },
+  { x: 17, y: 2 },
+  { x: 17, y: 6 },
+  { x: 2, y: 10 },
+];
+
 export const CityManagerTool: React.FC<CityManagerToolProps> = ({
   sectors,
   members,
@@ -25,15 +41,14 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
 }) => {
   const [tab, setTab] = useState<"dapp" | "member">("dapp");
 
-  // dApp form states
   const [dappName, setDappName] = useState("");
   const [logoText, setLogoText] = useState("A");
+  const [logoUrl, setLogoUrl] = useState("");
   const [zone, setZone] = useState<CityZone>("DeFi & Apps");
   const [dappUrl, setDappUrl] = useState("https://");
   const [dappDesc, setDappDesc] = useState("");
   const [dappColor, setDappColor] = useState("#0052FF");
 
-  // Member / Creator / Builder form states
   const [memberName, setMemberName] = useState("");
   const [handle, setHandle] = useState("@");
   const [role, setRole] = useState<"Builder" | "Creator" | "Member">("Builder");
@@ -43,26 +58,48 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
   const [outfitColor, setOutfitColor] = useState("#10B981");
   const [visor, setVisor] = useState(true);
 
+  const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setLogoUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const findOpenSpot = () => {
+    for (const slot of STALL_SLOTS) {
+      const taken = sectors.some(
+        (s) => Math.hypot(s.x - slot.x, s.y - slot.y) < 3.6
+      );
+      if (!taken) return slot;
+    }
+    const idx = sectors.length;
+    return { x: 2 + ((idx * 5) % 16), y: 2 + ((idx * 4) % 10) };
+  };
+
   const handleCreateDapp = (e: React.FormEvent) => {
     e.preventDefault();
     if (!dappName.trim()) return;
 
-    const idx = sectors.length;
-    const x = 3 + ((idx * 3) % 12);
-    const y = idx % 2 === 0 ? 5 : 8;
+    const spot = findOpenSpot();
 
     onAddSector({
       id: `dapp-${Date.now()}`,
       name: dappName.trim(),
       logoText: (logoText.trim() || dappName.trim()[0] || "B").slice(0, 2).toUpperCase(),
+      logoUrl: logoUrl.trim() || undefined,
       zone,
-      roleLabel: `${zone} dApp`,
+      roleLabel: `${zone} Stall`,
       description:
-        dappDesc.trim() || `Onchain spot for ${dappName.trim()} inside Base City.`,
+        dappDesc.trim() || `Official stall for ${dappName.trim()} in Base City.`,
       url: dappUrl.trim() || "https://base.org",
-      x,
-      y,
-      width: 3,
+      x: spot.x,
+      y: spot.y,
+      width: 2.5,
       height: 2,
       color: dappColor,
       accent: "#e0f2fe",
@@ -70,6 +107,7 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
 
     setDappName("");
     setLogoText("A");
+    setLogoUrl("");
     setDappUrl("https://");
     setDappDesc("");
   };
@@ -79,8 +117,8 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
     if (!memberName.trim()) return;
 
     const idx = members.length;
-    const x = 4 + ((idx * 2.5) % 11);
-    const y = 6.5 + ((idx * 1.2) % 3);
+    const x = 4 + ((idx * 3) % 13);
+    const y = 7.5 + ((idx * 1.3) % 2);
 
     onAddMember({
       id: `member-${Date.now()}`,
@@ -117,7 +155,7 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
       }}
     >
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: "#38bdf8" }}>
-        Add dApp or Base Citizen
+        Add dApp Stall or Citizen
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -135,7 +173,7 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             color: "#fff",
           }}
         >
-          + Add dApp
+          + dApp Stall
         </button>
         <button
           type="button"
@@ -164,14 +202,25 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             onChange={(e) => setDappName(e.target.value)}
             style={{ padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
           />
+          <input
+            type="text"
+            placeholder="Logo Image URL (https://...png)"
+            value={logoUrl}
+            onChange={(e) => setLogoUrl(e.target.value)}
+            style={{ padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
+          />
+          <label style={{ fontSize: 11, color: "#94a3b8", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>Or upload logo:</span>
+            <input type="file" accept="image/*" onChange={handleLogoFile} style={{ fontSize: 11, maxWidth: 165 }} />
+          </label>
           <div style={{ display: "flex", gap: 6 }}>
             <input
               type="text"
-              placeholder="Logo (1-2 chars)"
+              placeholder="Badge (2 chars)"
               maxLength={2}
               value={logoText}
               onChange={(e) => setLogoText(e.target.value)}
-              style={{ width: 70, padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
+              style={{ width: 78, padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
             />
             <select
               value={zone}
@@ -194,13 +243,13 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
           />
           <input
             type="text"
-            placeholder="Short description"
+            placeholder="Popup greeting / short info"
             value={dappDesc}
             onChange={(e) => setDappDesc(e.target.value)}
             style={{ padding: 6, borderRadius: 6, border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
           />
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span style={{ color: "#94a3b8" }}>Spot Color:</span>
+            <span style={{ color: "#94a3b8" }}>Stall Color:</span>
             {COLORS.map((c) => (
               <button
                 key={c}
@@ -221,7 +270,7 @@ export const CityManagerTool: React.FC<CityManagerToolProps> = ({
             type="submit"
             style={{ padding: 7, borderRadius: 8, border: "none", background: "#10b981", color: "#052e16", fontWeight: 700, cursor: "pointer" }}
           >
-            Place dApp in Base City
+            Build Stall in Base City
           </button>
         </form>
       ) : (
