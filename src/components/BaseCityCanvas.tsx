@@ -12,10 +12,10 @@ interface BaseCityCanvasProps {
   onSelectMember: (member: CityMember | null) => void;
 }
 
-const GRID_COLS = 20;
+const GRID_COLS = 22;
 const GRID_ROWS = 15;
-const TILE_W = 56;
-const TILE_H = 28;
+const TILE_W = 54;
+const TILE_H = 27;
 
 function gridToIso(gx: number, gy: number, originX: number, originY: number) {
   return {
@@ -46,7 +46,19 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
   const targetPos = useRef<{ gx: number; gy: number } | null>(null);
   const keysPressed = useRef<Record<string, boolean>>({});
   const walkPhase = useRef(0);
+  const logoCache = useRef<Record<string, HTMLImageElement>>({});
   const [nearbySector, setNearbySector] = useState<CitySector | null>(null);
+
+  useEffect(() => {
+    sectors.forEach((sec) => {
+      if (sec.logoUrl && !logoCache.current[sec.logoUrl]) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = sec.logoUrl;
+        logoCache.current[sec.logoUrl] = img;
+      }
+    });
+  }, [sectors]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -71,7 +83,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const originX = canvas.width / 2;
-    const originY = 95;
+    const originY = 90;
 
     const { gx, gy } = isoToGrid(sx, sy, originX, originY);
     const clampedX = Math.max(1, Math.min(GRID_COLS - 1.5, gx));
@@ -89,10 +101,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
 
     const clickedSector = sectors.find(
       (s) =>
-        clampedX >= s.x - 0.8 &&
-        clampedX <= s.x + s.width + 0.8 &&
-        clampedY >= s.y - 0.8 &&
-        clampedY <= s.y + s.height + 0.8
+        clampedX >= s.x - 0.7 &&
+        clampedX <= s.x + s.width + 0.7 &&
+        clampedY >= s.y - 0.7 &&
+        clampedY <= s.y + s.height + 0.7
     );
     if (clickedSector) {
       onSelectSector(clickedSector);
@@ -149,7 +161,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         sectors.find((s) => {
           const cx = s.x + s.width / 2;
           const cy = s.y + s.height / 2;
-          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 3.2;
+          return Math.hypot(playerPos.current.gx - cx, playerPos.current.gy - cy) < 2.8;
         }) || null;
 
       setNearbySector((prev) => (prev?.id === foundNear?.id ? prev : foundNear));
@@ -164,7 +176,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const originX = canvas.width / 2;
-      const originY = 95;
+      const originY = 90;
 
       for (let r = 0; r < GRID_ROWS; r++) {
         for (let c = 0; c < GRID_COLS; c++) {
@@ -176,7 +188,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           let tileFill = "#334155";
           if (r >= 9 && r <= 11) tileFill = "#f3d58d";
           if (r >= 12) tileFill = "#0ea5e9";
-          if (r === 7 || c === 8) tileFill = "#1e293b";
+          if (r === 5 || r === 8 || c === 6 || c === 12) tileFill = "#1e293b";
 
           ctx.beginPath();
           ctx.moveTo(p0.x, p0.y);
@@ -191,36 +203,81 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         }
       }
 
-      // Draw dApp & City Sectors with Logo Badge
+      // Draw each dApp as a Market/Expo Stall Booth
       sectors.forEach((sec) => {
         const topLeft = gridToIso(sec.x, sec.y, originX, originY);
         const topRight = gridToIso(sec.x + sec.width, sec.y, originX, originY);
         const bottomRight = gridToIso(sec.x + sec.width, sec.y + sec.height, originX, originY);
         const bottomLeft = gridToIso(sec.x, sec.y + sec.height, originX, originY);
-        const lift = sec.zone === "Beach & Lounge" ? 8 : 26;
+        const counterH = 14;
+        const roofH = 38;
         const isSelected = selectedSector?.id === sec.id;
+        const isNear = foundNear?.id === sec.id;
 
+        // 1. Stall Front Counter Base
         ctx.beginPath();
         ctx.moveTo(bottomLeft.x, bottomLeft.y);
         ctx.lineTo(bottomRight.x, bottomRight.y);
-        ctx.lineTo(bottomRight.x, bottomRight.y - lift);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - lift);
+        ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
+        ctx.lineTo(bottomLeft.x, bottomLeft.y - counterH);
         ctx.closePath();
         ctx.fillStyle = sec.color;
         ctx.fill();
 
+        // Right counter wall
         ctx.beginPath();
-        ctx.moveTo(topLeft.x, topLeft.y - lift);
-        ctx.lineTo(topRight.x, topRight.y - lift);
-        ctx.lineTo(bottomRight.x, bottomRight.y - lift);
-        ctx.lineTo(bottomLeft.x, bottomLeft.y - lift);
+        ctx.moveTo(bottomRight.x, bottomRight.y);
+        ctx.lineTo(topRight.x, topRight.y);
+        ctx.lineTo(topRight.x, topRight.y - counterH);
+        ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
+        ctx.closePath();
+        ctx.fillStyle = "#1e293b";
+        ctx.fill();
+
+        // Counter top table
+        ctx.beginPath();
+        ctx.moveTo(topLeft.x, topLeft.y - counterH);
+        ctx.lineTo(topRight.x, topRight.y - counterH);
+        ctx.lineTo(bottomRight.x, bottomRight.y - counterH);
+        ctx.lineTo(bottomLeft.x, bottomLeft.y - counterH);
+        ctx.closePath();
+        ctx.fillStyle = "#f8fafc";
+        ctx.fill();
+
+        // 2. Four Stall Poles supporting the Canopy
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 2.5;
+        [topLeft, topRight, bottomRight, bottomLeft].forEach((corner) => {
+          ctx.beginPath();
+          ctx.moveTo(corner.x, corner.y - counterH);
+          ctx.lineTo(corner.x, corner.y - roofH);
+          ctx.stroke();
+        });
+        ctx.lineWidth = 1;
+
+        // 3. Stall Canopy / Awning Roof
+        ctx.beginPath();
+        ctx.moveTo(topLeft.x, topLeft.y - roofH);
+        ctx.lineTo(topRight.x, topRight.y - roofH);
+        ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
+        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH);
+        ctx.closePath();
+        ctx.fillStyle = sec.color;
+        ctx.fill();
+        ctx.lineWidth = isSelected || isNear ? 3 : 1.5;
+        ctx.strokeStyle = isSelected || isNear ? "#facc15" : "#ffffff";
+        ctx.stroke();
+        ctx.lineWidth = 1;
+
+        // Front Awning Flap
+        ctx.beginPath();
+        ctx.moveTo(bottomLeft.x, bottomLeft.y - roofH);
+        ctx.lineTo(bottomRight.x, bottomRight.y - roofH);
+        ctx.lineTo(bottomRight.x, bottomRight.y - roofH + 7);
+        ctx.lineTo(bottomLeft.x, bottomLeft.y - roofH + 7);
         ctx.closePath();
         ctx.fillStyle = sec.accent;
         ctx.fill();
-        ctx.lineWidth = isSelected ? 3 : 1.5;
-        ctx.strokeStyle = isSelected ? "#facc15" : "#0f172a";
-        ctx.stroke();
-        ctx.lineWidth = 1;
 
         const center = gridToIso(
           sec.x + sec.width / 2,
@@ -229,26 +286,73 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           originY
         );
 
+        // 4. Signboard & Logo Image or Letter Badge above Stall
+        const signY = center.y - roofH - 16;
         ctx.beginPath();
-        ctx.arc(center.x, center.y - lift - 10, 11, 0, Math.PI * 2);
-        ctx.fillStyle = sec.color;
+        ctx.arc(center.x, signY, 13, 0, Math.PI * 2);
+        ctx.fillStyle = "#0f172a";
         ctx.fill();
         ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.8;
         ctx.stroke();
         ctx.lineWidth = 1;
 
-        ctx.font = "bold 10px system-ui, sans-serif";
+        const cachedImg = sec.logoUrl ? logoCache.current[sec.logoUrl] : null;
+        if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(center.x, signY, 11, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(cachedImg, center.x - 11, signY - 11, 22, 22);
+          ctx.restore();
+        } else {
+          ctx.font = "bold 11px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(sec.logoText, center.x, signY + 4);
+        }
+
+        // Stall Name Banner
+        ctx.font = "bold 11px system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(sec.logoText, center.x, center.y - lift - 6.5);
+        ctx.fillText(sec.name, center.x, center.y - roofH + 3);
 
-        ctx.font = "bold 11px system-ui, sans-serif";
-        ctx.fillStyle = "#0f172a";
-        ctx.fillText(sec.name, center.x, center.y - lift + 10);
+        // 5. Proximity Floating Popup Bubble when player walks close!
+        if (isNear) {
+          const popupText = `${sec.name}: ${sec.description.slice(0, 42)}${
+            sec.description.length > 42 ? "..." : ""
+          }`;
+          ctx.font = "bold 11px system-ui, sans-serif";
+          const textW = Math.min(260, ctx.measureText(popupText).width + 20);
+          const boxX = center.x - textW / 2;
+          const boxY = signY - 44;
+
+          ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, textW, 26, 8);
+          ctx.fill();
+          ctx.strokeStyle = "#38bdf8";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.lineWidth = 1;
+
+          // Speech bubble pointer triangle
+          ctx.beginPath();
+          ctx.moveTo(center.x - 5, boxY + 26);
+          ctx.lineTo(center.x + 5, boxY + 26);
+          ctx.lineTo(center.x, boxY + 32);
+          ctx.closePath();
+          ctx.fillStyle = "#38bdf8";
+          ctx.fill();
+
+          ctx.fillStyle = "#f8fafc";
+          ctx.textAlign = "center";
+          ctx.fillText(popupText, center.x, boxY + 17);
+        }
       });
 
-      // Draw Added Builders / Creators / Members with gentle arm animation
+      // Draw Builders / Creators / Members with arm swing
       members.forEach((m, index) => {
         const mPos = gridToIso(m.x, m.y, originX, originY);
         const w = m.bodyWidth;
@@ -269,13 +373,11 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.lineWidth = Math.max(2.2, 2.8 * w);
         ctx.lineCap = "round";
 
-        // Left arm
         ctx.beginPath();
         ctx.moveTo(mPos.x - torsoW / 2, shoulderY);
         ctx.lineTo(mPos.x - torsoW / 2 - 4 * w, shoulderY + 7 + armSwing);
         ctx.stroke();
 
-        // Right arm (waves slightly higher when selected)
         ctx.beginPath();
         ctx.moveTo(mPos.x + torsoW / 2, shoulderY);
         ctx.lineTo(
@@ -306,7 +408,7 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
         ctx.fillText(`${m.name} (${m.role})`, mPos.x, headY - headR - 5);
       });
 
-      // Draw Player Avatar with animated arms
+      // Draw Player Avatar with walking arm & leg animation
       const pScreen = gridToIso(playerPos.current.gx, playerPos.current.gy, originX, originY);
       const wScale = avatar.bodyWidth;
       const hScale = avatar.bodyHeight;
@@ -324,7 +426,6 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fill();
 
-      // Legs
       ctx.strokeStyle = avatar.skinTone;
       ctx.lineWidth = 3 * wScale;
       ctx.lineCap = "round";
@@ -335,31 +436,26 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
       ctx.lineTo(pScreen.x + 4 * wScale, pScreen.y + 5 - legOffset);
       ctx.stroke();
 
-      // Torso
       ctx.fillStyle = avatar.outfitColor;
       ctx.beginPath();
       ctx.roundRect(pScreen.x - torsoW / 2, pScreen.y - 2 - torsoH, torsoW, torsoH, 5);
       ctx.fill();
 
-      // Animated Arms
       const pShoulderY = pScreen.y - 2 - torsoH + 4;
       ctx.strokeStyle = avatar.skinTone;
       ctx.lineWidth = Math.max(2.5, 3.2 * wScale);
       ctx.lineCap = "round";
 
-      // Left arm
       ctx.beginPath();
       ctx.moveTo(pScreen.x - torsoW / 2, pShoulderY);
       ctx.lineTo(pScreen.x - torsoW / 2 - 5 * wScale, pShoulderY + 8 + leftArmOffset);
       ctx.stroke();
 
-      // Right arm
       ctx.beginPath();
       ctx.moveTo(pScreen.x + torsoW / 2, pShoulderY);
       ctx.lineTo(pScreen.x + torsoW / 2 + 5 * wScale, pShoulderY + 8 + rightArmOffset);
       ctx.stroke();
 
-      // Head
       const headY = pScreen.y - 4 - torsoH - headR;
       ctx.beginPath();
       ctx.arc(pScreen.x, headY, headR, 0, Math.PI * 2);
@@ -403,10 +499,10 @@ export const BaseCityCanvas: React.FC<BaseCityCanvasProps> = ({
           color: "#e2e8f0",
         }}
       >
-        Move: <b>WASD / Arrows / Click Map</b> • Click dApp or Avatar for links
+        Walk near any stall for popup • Click stall or avatar for links
         {nearbySector && (
           <span style={{ marginLeft: 10, color: "#38bdf8" }}>
-            Near: <b>{nearbySector.name}</b>
+            Visiting: <b>{nearbySector.name}</b>
           </span>
         )}
       </div>
